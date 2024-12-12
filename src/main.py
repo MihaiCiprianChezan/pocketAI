@@ -4,10 +4,6 @@ from PySide6.QtWidgets import QApplication
 from floating_energy_ball import FloatingEnergyBall
 from voice_util_app import VoiceUtilApp
 
-import warnings
-
-# warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
-
 class VoiceUtilThread(threading.Thread):
     def __init__(self, voice_app):
         super().__init__()

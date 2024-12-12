@@ -1,25 +1,29 @@
-
 import os
 import threading
-from gc import callbacks
 from time import sleep
 from uuid import uuid4
 import numpy as np
 import pygame
 import speech_recognition as sr
+import torch
 import whisper
 from gtts import gTTS
+import warnings
 
-device = "cpu"
-print("Torch version:", torch.__version__)
-print("CUDA is available:", torch.cuda.is_available())
+warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
+warnings.filterwarnings("ignore", message="Some parameters are on the meta device because they were offloaded to the cpu.")
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 if torch.cuda.is_available():
-    print("CUDA version:", torch.version.cuda)
-    print("CUDA device name:", torch.cuda.get_device_name(0))
+    print("CUDA is available, using GPU ...")
     device = "cuda"
+else:
+    print("GPU / CUDA NOT available, using CPU ...")
+    device = "cpu"
 
 # Initialize the Whisper model
-model = whisper.load_model("base", device="cuda, fp16=False)
+model = whisper.load_model("base", device=device)
+model = model.to(device)
 
 class SpeechProcessor:
     def __init__(self, sample_rate=16000):

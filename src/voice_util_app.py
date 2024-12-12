@@ -69,6 +69,21 @@ class VoiceUtilApp(QObject):
         command = " ".join(tokens[:token_count])
         return command
 
+    @staticmethod
+    def is_command(tokens, searched_tokens):
+        """
+        Get the command from the tokens if the searched tokens exist
+        consecutively in the token list.
+        """
+        token_count = len(searched_tokens)
+        # Convert each sliding window of 'token_count' size in tokens to compare
+        for i in range(len(tokens) - token_count + 1):
+            # Extract current slice to compare
+            if tokens[i:i + token_count] == searched_tokens:
+                print(f"Comparing  {tokens[i:i + token_count]} with {searched_tokens} ... ")
+                return True
+        return False
+
     def process_command(self, spoken, clean):
         """Process voice commands and issue them to the FloatingEnergyBall."""
         spoken, clean, is_for_bot = self.is_for_bot(spoken, clean)
@@ -156,12 +171,15 @@ class VoiceUtilApp(QObject):
             else:
                 print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
-        elif self.get_command(tokens) == "exit exit":
-            self.speech_processor.read_text("Good bye!")
-            print("Exiting the program...")
-            self.speech_processor.stop_sound()
-            self.emit_exit()
-            QCoreApplication.quit()
+        elif self.is_command(tokens, ["exit", "exit"]):
+            try:
+                self.speech_processor.read_text("Good bye!")
+                print("Exiting the program...")
+                self.speech_processor.stop_sound()
+                self.emit_exit()
+                sys.exit(0)
+            except Exception as e:
+                print(f"Error exiting: {e}, {e.__traceback__}")
 
         else:
             if self.in_write_mode:
