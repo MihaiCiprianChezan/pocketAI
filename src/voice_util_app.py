@@ -9,10 +9,17 @@ from chat_bot import ChatBot
 from speech_processor import SpeechProcessor
 from floating_energy_ball import FloatingEnergyBall
 from PySide6.QtCore import QObject, Signal
+import sys
+import threading
+from PySide6.QtWidgets import QApplication
+from floating_energy_ball import FloatingEnergyBall
+# from voice_util_app import VoiceUtilApp
+
 # Precompile regex patterns
 NON_ALPHANUMERIC_REGEX = re.compile(r'[^a-zA-Z0-9\s]')
 MULTIPLE_SPACES_REGEX = re.compile(r'\s+')
 from PySide6.QtCore import QCoreApplication
+
 
 
 
@@ -29,8 +36,15 @@ class VoiceUtilApp(QObject):
 
     SLOW_GROW = {"factor": 1.1, "duration": 1500}
 
+    FAST_ZOOM = {"factor": 0.95, "duration": 500}
+    ZOOM_IN = {"factor": 0.95, "duration": 100}
+
     SHORT_CONFIRMS = ['hmm...', 'ooh...', 'ahh..', 'uhh..', 'aha...', 'sure...', 'oh...', 'ok...', 'yup...', 'yes...',
                      'right...']
+
+    GLITCHES = [
+        "I'm going to go to the next room"
+    ]
 
     def __init__(self):
         super().__init__()
@@ -93,12 +107,13 @@ class VoiceUtilApp(QObject):
         tokens = clean.split()
 
         print(f"Command tokens: {tokens}")
+        self.emit_zoom_effect(self.ZOOM_IN)
 
-        if self.speech_processor.is_playing():
-            self.speech_processor.stop_sound(call_back=self.emit_stop_pulsating)
+        # if self.speech_processor.is_playing():
+        #     self.speech_processor.stop_sound(call_back=self.emit_stop_pulsating)
 
         # self.send_command_to_ball.emit("reset_colorized", {})
-        self.send_command_to_ball.emit("zoom_effect", {})
+
 
         if self.get_command(tokens) == "paste paste":
             self.paste_at_cursor()
@@ -169,7 +184,7 @@ class VoiceUtilApp(QObject):
                 sleep(0.5)
                 copied_text = pyperclip.paste()
                 prompt = f"Explain this to me: {copied_text}"
-                self.color_chatbot(prompt)
+                self.speak_bot_colored(prompt)
             else:
                 print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
@@ -189,11 +204,11 @@ class VoiceUtilApp(QObject):
             # Normal chat if bot name was mentioned or if active chat is on
             # TODO: add if bot_speaking then interrupt
             if self.chatting or is_for_bot:
-                self.color_chatbot(spoken)
+                self.speak_bot_colored(spoken)
 
-    def color_chatbot(self, spoken_prompt):
+    def speak_bot_colored(self, spoken_prompt, colour=MAGENTA):
         # self.emit_zoom_effect(self.SLOW_GROW)
-        self.emit_change_color(self.MAGENTA)
+        self.emit_change_color(colour)
 
         print(f"[USER prompt]: {spoken_prompt}")
         print(f"[AI response]:", end="")
@@ -205,11 +220,21 @@ class VoiceUtilApp(QObject):
                 diff = partial_response.replace(response, "")
                 response += diff
                 if diff:
+                    self.emit_zoom_effect()
                     print(f"{diff}", end="")
+        print(f"\n")
         # print(f"\n[Full AI response]: {response}")
-        self.speech_processor.read_text(response, self.emit_start_pulsating, self.emit_stop_pulsating)
+        self.speak(response)
 
-    def emit_zoom_effect(self, zoom):
+    # --------------------- Energy ball related ----------------------------
+    def speak(self, speech_script):
+        self.emit_start_pulsating()
+        self.speech_processor.read_text(speech_script, self.emit_start_pulsating, self.emit_stop_pulsating)
+
+    def make_silence(self):
+        self.speech_processor.stop_sound(call_back=self.emit_stop_pulsating)
+
+    def emit_zoom_effect(self, zoom=FAST_ZOOM):
         self.send_command_to_ball.emit("zoom_effect", zoom)
 
     def emit_change_color(self, color):
@@ -217,14 +242,16 @@ class VoiceUtilApp(QObject):
 
     def emit_start_pulsating(self):
         self.emit_change_color(self.BLUE)
-        # self.send_command_to_ball.emit("start_pulsating", {})
+        # self.emit_reset_colorized()
+        self.send_command_to_ball.emit("start_pulsating", {})
+        self.emit_stop_pulsating()
 
     def emit_reset_colorized(self):
         self.send_command_to_ball.emit("reset_colorized", {})
 
     def emit_stop_pulsating(self):
         """Stop pulsating the ball."""
-        # self.send_command_to_ball.emit("stop_pulsating", {})
+        self.send_command_to_ball.emit("stop_pulsating", {})
         self.emit_reset_colorized()
 
     def emit_exit(self):
@@ -243,6 +270,43 @@ class VoiceUtilApp(QObject):
                 self.process_command(spoken, cleaned)
 
 
+# if __name__ == "__main__":
+#     app = VoiceUtilApp()
+#     app.run()
+
+
+class VoiceUtilThread(threading.Thread):
+    def __init__(self, voice_app):
+        super().__init__()
+        self.voice_app = voice_app
+
+    def run(self):
+        """
+        Run the voice utility app in its own thread.
+        """
+        self.voice_app.run()
+
+
+def main():
+    app = QApplication(sys.argv)
+
+    energy_ball = FloatingEnergyBall("images/opti100.gif")
+    energy_ball.show()
+
+    voice_util_app = VoiceUtilApp()
+    voice_thread = VoiceUtilThread(voice_util_app)
+
+    voice_util_app.send_command_to_ball.connect(energy_ball.receive_command)
+
+    voice_thread.start()
+    # voice_thread.join()
+    sys.exit(app.exec())
+
+
 if __name__ == "__main__":
-    app = VoiceUtilApp()
-    app.run()
+    # Voice App
+    # app = VoiceUtilApp()
+    # app.run()
+
+    # Full threaded app mode with light ball
+    main()

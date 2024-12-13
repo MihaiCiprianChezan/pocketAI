@@ -254,7 +254,7 @@ class FloatingEnergyBall(QWidget):
             animation.start()
 
         # Schedule the next pulse with random intervals
-        def schedule_next_pulse(rand_a=50, rand_b=100):
+        def schedule_next_pulse(rand_a=100, rand_b=1000):
             if self.pulsating:  # Continue pulsating
                 single_pulse()
                 random_delay = random.randint(rand_a, rand_b)  # Add a random delay (500ms to 1000ms)
@@ -266,7 +266,7 @@ class FloatingEnergyBall(QWidget):
         # Trigger the first pulse immediately
         schedule_next_pulse()
 
-    def reset_colorized(self, command, _params=None, duration=800):
+    def reset_colorized(self, command, _params=None, duration=900):
         """
         Smoothly transition to no graphic effect.
         """

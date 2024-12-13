@@ -94,6 +94,7 @@ class SpeechProcessor:
             tts.write_to_fp(audio_stream)
             audio_stream.seek(0)
             if call_before:
+                print("read_text() Calling before function...")
                 call_before()
             self.play_stream(audio_stream.read(), call_back=call_back)
         except Exception as e:
@@ -111,11 +112,12 @@ class SpeechProcessor:
 
                 while pygame.mixer.get_busy():  # Wait while audio is playing
                     if self.stop_playback_event.is_set():  # Stop requested
-                        if call_back:
-                            call_back()
                         self._fade_out(pygame_sound, fade_out_duration_ms)
                         break
                     pygame.time.wait(100)  # Wait before re-checking if sound is playing
+                if call_back:
+                    print("play_stream() Calling after function...")
+                    call_back()
             except Exception as e:
                 print(f"Error during audio playback: {e}")
             finally:
