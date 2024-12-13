@@ -123,7 +123,6 @@ class SpeechProcessor:
             finally:
                 pygame.mixer.quit()  # Cleanup the mixer
                 self.stop_playback_event.clear()
-                # pygame.time.wait(1000)
 
         self.playback_thread = threading.Thread(target=playback_worker, args=(audio_stream,), daemon=True)
         self.playback_thread.start()

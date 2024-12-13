@@ -1,5 +1,6 @@
 import random
 import sys
+from time import sleep
 
 from PySide6.QtCore import QSize, QVariantAnimation, QTimer, QCoreApplication
 from PySide6.QtCore import Qt
@@ -10,7 +11,7 @@ from PySide6.QtWidgets import QGraphicsColorizeEffect
 from PySide6.QtWidgets import QMenu
 
 
-class FloatingEnergyBall(QWidget):
+class EnergyBall(QWidget):
     def __init__(self, gif_path="./images/opti100.gif"):
         super().__init__()
 
