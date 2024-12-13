@@ -1,18 +1,20 @@
 import random
-import re
 import sys
 import threading
+import time
 from time import sleep
 import keyboard
 import pyperclip
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
-
+from better_profanity import profanity
 from chat_bot import ChatBot
 from energy_ball import EnergyBall
 from speech_processor import SpeechProcessor
-from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, RED, ORANGE, BROWN, PINK, PURPLE, TURQUOISE, DARK_GREY, LIGHT_GREY, BLUE, GREEN, YELLOW, MAGENTA, GREY, SLOW_GROW, FAST_ZOOM, ZOOM_IN, SHORT_CONFIRMS, GLITCHES, GOODBYES, HELLOS
-from utils import is_recog_glitch
+from utils import is_recog_glitch, get_unique_choice, is_prompt_valid
+from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
+    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES
+
 
 class VoiceApp(QObject):
     # Define signals to communicate with the EnergyBall
@@ -33,6 +35,7 @@ class VoiceApp(QObject):
         self.chatbot = ChatBot()
         self.chatbot_speaking = False
         self.history = []
+        self.previous_expression = None
         self.speech_processor.read_text(random.choice(HELLOS), call_before=None, call_back=None)
 
     def clean_text(self, text):
@@ -51,9 +54,11 @@ class VoiceApp(QObject):
         keyboard.write(text, delay=0.005)
 
     def is_for_bot(self, spoken, clean, for_bot_attention=False):
-        if self.NAME.lower() in clean or self.NAME.lower() in spoken.lower():
-            clean = self.clean_text(clean.replace("opti", "").strip())
-            for variant in [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]:
+        name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
+        is_addressed = any(variant in clean or variant in spoken.lower() for variant in name_variants)
+        if is_addressed:
+            clean = self.clean_text(clean.replace(self.NAME.lower(), "").strip())
+            for variant in name_variants:
                 spoken = spoken.replace(variant, "").strip()
             for_bot_attention = True
         return spoken, clean, for_bot_attention
@@ -75,10 +80,17 @@ class VoiceApp(QObject):
 
     def process_command(self, spoken, clean):
         """Process voice commands and handle them using helper methods."""
+        if profanity.contains_profanity(spoken):
+            print(f"Profanity detected: {spoken}")
+            self.previous_expression = get_unique_choice(POLITE_RESPONSES, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+            return
+        prompt_is_valid = is_prompt_valid(spoken, clean)
         spoken, clean, is_for_bot = self.is_for_bot(spoken, clean)
         tokens = clean.split()
-        print(f"Command tokens: {tokens}")
-
+        print(f"[Prompt is valid]: {prompt_is_valid}")
+        print(f"[Prompt tokens]  : {tokens}")
+        print(f"[AI is speaking] : {self.chatbot_speaking}")
         # Delegate write-mode or general commands
         if self.in_write_mode:
             if not self.handle_write_mode_commands(tokens, spoken):
@@ -86,8 +98,8 @@ class VoiceApp(QObject):
                 self.write_text(spoken)
         elif not self.handle_general_commands(tokens, is_for_bot):
             # If no general commands are recognized, handle fallback for general mode
-            if self.chatting or is_for_bot:
-                self.color_speak(spoken)
+            if (not self.chatbot_speaking) and (self.chatting or is_for_bot) and prompt_is_valid:
+                self.get_ai_response(spoken)
 
     def handle_write_mode_commands(self, tokens, spoken):
         """Handle commands in write mode and return True if a command was handled."""
@@ -172,13 +184,13 @@ class VoiceApp(QObject):
             print("Chatbot is speaking, stopping chatbot ...")
             self.chatbot_speaking = False
             self.speech_processor.stop_sound()
-            self.speech_processor.wait(650)
-            speak = random.choice(SHORT_CONFIRMS)
+            self.speech_processor.wait(self.speech_processor.FADEOUT_DURATION_MS + 50)
+            self.previous_expression = get_unique_choice(SHORT_CONFIRMS, self.previous_expression)
             self.speech_processor.read_text(
-                speak,
+                self.previous_expression,
                 call_before=None,
                 call_back=self.ball_stop_pulsating
-                )
+            )
             return
         print("Chatbot is not currently speaking, no reason to stop...")
 
@@ -200,14 +212,15 @@ class VoiceApp(QObject):
             sleep(0.5)
             copied_text = pyperclip.paste()
             prompt = f"Explain this to me: {copied_text}"
-            self.color_speak(prompt)
+            self.get_ai_response(prompt)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
     def exit_app(self):
         """Exit the application gracefully."""
         try:
-            self.speech_processor.read_text(random.choice(GOODBYES), call_before=None, call_back=None)
+            self.previous_expression = get_unique_choice(GOODBYES, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             print("Exiting the program...")
             self.speech_processor.stop_sound(call_back=None)
             self.emit_exit()
@@ -215,28 +228,71 @@ class VoiceApp(QObject):
         except Exception as e:
             print(f"Error exiting: {e}, {e.__traceback__}")
 
-    def color_speak(self, spoken_prompt, colour=SPEAKING):
+    def get_ai_response(
+            self,
+            spoken_prompt,
+            colour=SPEAKING,
+            min_interval=3.0,  # Minimum interval in seconds
+            max_interval=5.0,  # Maximum interval in seconds
+            entertain_messages=THINKING_SOUNDS  # List of random messages
+    ):
         """
-        Will change the color of the ball start pulsating on the rhythm of the text token responses from the model.
-        Will aloso progressively print in the console the full response from the AI model.
-        Once the response from the AI model is received it will be spoken out loud.
+        Will change the color of the ball, start pulsating on the rhythm of the text token responses from the model.
+        Will also progressively print in the console the full response from the AI model.
+        Once the response from the AI model is received, it will be spoken out loud.
         """
         self.ball_change_color(self.GENERATING)
         print(f"[USER prompt]: {spoken_prompt}")
         print(f"[AI response]:", end="")
         response = ""
         response_iter = self.chatbot.chat(self.history, spoken_prompt, return_iter=True)
+        # Initialize time tracking
+        if entertain_messages:
+            last_update_time, random_interval = self._initialize_time(min_interval, max_interval)
         for partial_response in response_iter:
-            if response != partial_response:
-                diff = partial_response.replace(response, "")
-                response += diff
-                if diff:
-                    self.ball_zoom_effect()
-                    print(f"{diff}", end="")
+            # Update and print partial response
+            response = self._update_response(response, partial_response)
+            # Entertain the user periodically
+            if entertain_messages:
+                if self._should_entertain(last_update_time, random_interval):
+                    last_update_time, random_interval = self._entertain_user(
+                        entertain_messages, min_interval, max_interval
+                    )
+
         print(f"\n")
         self.ball_change_color(colour)
-        # print(f"\n[Full AI response]: {response}")
         self.speak(response)
+
+    # ------------------------- Helper Functions -------------------------
+
+    def _initialize_time(self, min_interval, max_interval):
+        """Initialize and return the starting time and a random interval."""
+        last_update_time = time.time()
+        random_interval = random.uniform(min_interval, max_interval)
+        return last_update_time, random_interval
+
+    def _update_response(self, response, partial_response):
+        """Update the response with the latest partial data and print any new tokens."""
+        if response != partial_response:
+            diff = partial_response.replace(response, "")
+            response += diff
+            if diff:
+                self.ball_zoom_effect()
+                print(f"{diff}", end="")
+        return response
+
+    def _should_entertain(self, last_update_time, random_interval):
+        """Check if it is time to entertain the user."""
+        return time.time() - last_update_time >= random_interval
+
+    def _entertain_user(self, entertain_messages, min_interval, max_interval):
+        """
+        Entertain the user with a random message and reinitialize time tracking.
+        Returns: tuple: Updated last_update_time and random_interval.
+        """
+        self.previous_expression = get_unique_choice(entertain_messages, self.previous_expression)
+        self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+        return self._initialize_time(min_interval, max_interval)
 
     # --------------------- Energy ball related ----------------------------
 
@@ -308,6 +364,7 @@ class VoiceUtilThread(threading.Thread):
         Run the voice utility app in its own thread.
         """
         self.voice_app.run()
+
 
 def main():
     app = QApplication(sys.argv)

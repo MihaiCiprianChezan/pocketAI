@@ -69,6 +69,72 @@ GOODBYES = [
     "Farewell!"
 ]
 
+THINKING_SOUNDS = [
+    "Hmm...",
+    "Let's see...",
+    "Interesting...",
+    "Just a sec...",
+    "Good one...",
+    "Hold on...",
+    "One sec...",
+    "Aha...",
+    "Alright...",
+    "Wait...",
+    "Hmm, okay...",
+    "Curious...",
+    "Got it...",
+    "Okay...",
+    "Alrighty...",
+    "Looking...",
+    "Huh...",
+    "Sure...",
+    "Well...",
+    "Cool...",
+    "Okey!",
+    "Yep...",
+    "Aha...",
+    "Right...",
+    "Uh-huh...",
+    "Yup...",
+    "Ah...",
+    "Yeah...",
+    "Righty...",
+    "Yep-yep...",
+    "Ooh...",
+    "Ah-ha...",
+    "Mmm...",
+    "Okay then...",
+    "So...",
+    "Hmm, alright...",
+    "Uh...",
+    "Eh...",
+    "Oh..."
+]
+
+POLITE_RESPONSES = [
+    "Oh, that's colorful. Let's keep it respectful.",
+    "Well, that escalated quickly. Let's tone it down a notch.",
+    "I believe we can be civil. How about we try that?",
+    "Let's aim for a more polite chat.",
+    "Classy! But let's keep it clean.",
+    "Such language! Let's steer clear of that.",
+    "Let's keep things friendly.",
+    "I prefer conversations without the profanities.",
+    "Whoa there! Let’s stay classy.",
+    "Let’s keep it professional.",
+    "Mind your language, please.",
+    "Let's keep our conversation respectful.",
+    "Let's use kind words.",
+    "There's no need for that language.",
+    "Keep it polite, please.",
+    "Let's stay respectful.",
+    "Let's keep it civil.",
+    "Let's keep it clean.",
+    "Respectful language goes a long way.",
+    "We can communicate better with respectful language."
+]
+
+
 # Glitches in voice recognizer
 GLITCHES = [
     "I'm going to go to the next room",

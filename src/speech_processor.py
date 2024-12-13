@@ -8,12 +8,6 @@ import torch
 import whisper
 from gtts import gTTS
 
-# Constants
-FADEOUT_DURATION_MS = 500
-SAMPLE_RATE = 16000
-WAIT_DURATION_MS = 2000
-FADEOUT_STEPS = 10
-
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", message="Some parameters are on the meta device because they were offloaded to the cpu.")
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -26,9 +20,15 @@ model = whisper.load_model("base", device=device)
 model = model.to(device)
 
 class SpeechProcessor:
+    # Constants
+    FADEOUT_DURATION_MS = 500
+    SAMPLE_RATE = 16000
+    WAIT_DURATION_MS = 2000
+    FADEOUT_STEPS = 10
+
     def __init__(self):
         self.recognizer = sr.Recognizer()
-        self.microphone = sr.Microphone(sample_rate=SAMPLE_RATE)
+        self.microphone = sr.Microphone(sample_rate=self.SAMPLE_RATE)
         self.stop_playback_event = threading.Event()
         self.playback_thread = None
         self.fadeout_thread = None
@@ -70,12 +70,11 @@ class SpeechProcessor:
             print(f"Error recognizing speech: {e}")
             return ""
 
-    @staticmethod
-    def _fade_out(sound, duration_ms):
+    def _fade_out(self, sound, duration_ms):
         """Manually fade out the audio by decreasing volume gradually over duration."""
         if not sound:
             return
-        total_steps = FADEOUT_STEPS
+        total_steps = self.FADEOUT_STEPS
         step_delay = duration_ms // total_steps
         initial_volume = sound.get_volume()  # Get the current volume
         volume_step = initial_volume / total_steps
@@ -115,14 +114,14 @@ class SpeechProcessor:
                         self._fade_out(pygame_sound, fade_out_duration_ms)
                         break
                     pygame.time.wait(100)  # Wait before re-checking if sound is playing
-                if call_back:
-                    print("play_stream() Calling after function...")
-                    call_back()
             except Exception as e:
                 print(f"Error during audio playback: {e}")
             finally:
                 pygame.mixer.quit()  # Cleanup the mixer
                 self.stop_playback_event.clear()
+            if call_back:
+                print("play_stream() Calling after function...")
+                call_back()
 
         self.playback_thread = threading.Thread(target=playback_worker, args=(audio_stream,), daemon=True)
         self.playback_thread.start()
@@ -130,14 +129,14 @@ class SpeechProcessor:
     def stop_sound(self, call_back=None):
         with self.mixer_lock:
             if not pygame.mixer.get_init():
-                print("Mixer not initialized — cannot stop sound.")
+                # print("Mixer not initialized — cannot stop sound.")
                 return
             print(f"Stopping audio playback with fade-out...")
             self.stop_playback_event.set()
-            if call_back:
-                call_back()
             # Make sure we wait a bit longer than the fade
-            pygame.time.wait(FADEOUT_DURATION_MS + 100)
+            pygame.time.wait(self.FADEOUT_DURATION_MS + 100)
+        if call_back:
+            call_back()
 
     def shutdown(self):
         """Cleanly shut down the mixer."""
@@ -156,19 +155,23 @@ if __name__ == "__main__":
 
     def test_playback():
         print("Testing playback...")
-        processor.read_text("hmm... ooh... ahh... uhh.. aha... sure... oh... ok... yup... yes... right...")
-        pygame.time.wait(1000)
-        processor.stop_sound()
+
+        # processor.read_text("hmm... ooh... ahh... uhh.. aha... sure... oh... ok... yup... yes... right...")
         # pygame.time.wait(1000)
-        processor.read_text("This is a test. Let's see if the fade-out works properly.")
-        pygame.time.wait(WAIT_DURATION_MS)
-        processor.stop_sound()
-        # pygame.time.wait(WAIT_DURATION_MS)
-        processor.read_text("This is the second sound test. Let's see if the start of the second sound works properly.")
-        pygame.time.wait(WAIT_DURATION_MS)
-        processor.stop_sound()
-        # pygame.time.wait(WAIT_DURATION_MS)
-        processor.read_text("This is third test... works properly?")
+        # processor.stop_sound()
+        # # pygame.time.wait(1000)
+        # processor.read_text("This is a test. Let's see if the fade-out works properly.")
+        # pygame.time.wait(processor.WAIT_DURATION_MS)
+        # processor.stop_sound()
+        # # pygame.time.wait(WAIT_DURATION_MS)
+        # processor.read_text("This is the second sound test. Let's see if the start of the second sound works properly.")
+        # pygame.time.wait(processor.WAIT_DURATION_MS)
+        # processor.stop_sound()
+        # # pygame.time.wait(WAIT_DURATION_MS)
+        # processor.read_text("This is third test... works properly?")
+
+        from varstore import THINKING_SOUNDS
+        processor.read_text(" ".join(THINKING_SOUNDS))
 
 
     threading.Thread(target=test_playback, daemon=True).start()
