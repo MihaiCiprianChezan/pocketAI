@@ -71,14 +71,34 @@ class ChatBot:
         t.join()
         return response
 
-    def chat(self, history, message):
+    def chat(self, history, message, return_iter=False):
+        """
+        Get the entire response at once
+        response = self.chat(history, "Hello!")
+        print(response) > Final output as a single string
+
+        Get the response incrementally as an iterator
+        response_stream = self.chat(history, "Hello!", return_iter=True)
+        for partial_response in response_stream:
+        print(partial_response)  >  intermediate updates as they are generated
+        """
         if not history:
             history = []
         history.append([message, ""])  # Append user message with empty reply
-
         # Full response generation
         response = ""
-        for updated_history in self.predict(history):
-            # Cache the entire response
-            response = updated_history[-1][1]
-        return response
+
+        def response_iterator():
+            nonlocal response  # Allow updating the outer `response` variable
+            for updated_history in self.predict(history):
+                # Cache the entire response
+                response = updated_history[-1][1]
+                yield response
+
+        if return_iter:
+            return response_iterator()  # Return an iterator
+        else:
+            # If `return_iterator` is False, just compute the full response
+            for _ in response_iterator():
+                pass
+            return response

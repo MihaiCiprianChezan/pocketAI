@@ -1,160 +1,176 @@
-import os
+import io
 import threading
-from time import sleep
-from uuid import uuid4
+import warnings
 import numpy as np
 import pygame
 import speech_recognition as sr
 import torch
 import whisper
 from gtts import gTTS
-import warnings
+
+# Constants
+FADEOUT_DURATION_MS = 500
+SAMPLE_RATE = 16000
+WAIT_DURATION_MS = 2000
+FADEOUT_STEPS = 10
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", message="Some parameters are on the meta device because they were offloaded to the cpu.")
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-if torch.cuda.is_available():
-    print("CUDA is available, using GPU ...")
-    device = "cuda"
-else:
-    print("GPU / CUDA NOT available, using CPU ...")
-    device = "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
 
 # Initialize the Whisper model
 model = whisper.load_model("base", device=device)
 model = model.to(device)
 
 class SpeechProcessor:
-    def __init__(self, sample_rate=16000):
-        self.sample_rate = sample_rate
+    def __init__(self):
         self.recognizer = sr.Recognizer()
-        self.microphone = sr.Microphone(sample_rate=self.sample_rate)
-        self.playback_thread = None
+        self.microphone = sr.Microphone(sample_rate=SAMPLE_RATE)
         self.stop_playback_event = threading.Event()
-
+        self.playback_thread = None
+        self.fadeout_thread = None
+        self.mixer_lock = threading.Lock()
         # Initialize Pygame mixer
-        pygame.mixer.init()
+        self._initialize_mixer()
+
+
+    def _initialize_mixer(self):
+        """Ensure the Pygame mixer is initialized."""
+        with self.mixer_lock:
+            if not pygame.mixer.get_init():
+                try:
+                    pygame.mixer.init()  # Initialize mixer
+                    print("Pygame mixer initialized successfully.")
+                    print(f"Audio device: {pygame.mixer.get_init()}")
+                except pygame.error as e:
+                    print(f"Error initializing Pygame mixer: {e}")  # Log any mixer error
+                    return False
+            return True
 
     def is_playing(self):
-        """Check if playback is actively running."""
-        return (
-                self.playback_thread is not None and
-                self.playback_thread.is_alive() and
-                pygame.mixer.music.get_busy()
-        )
+        with self.mixer_lock:
+            if not pygame.mixer.get_init():
+                print("Mixer not initialized — cannot check if audio is playing.")
+                return False
+            return pygame.mixer.music.get_busy()
 
     def recognize_speech(self):
-        """Recognize speech input using the microphone and Whisper model."""
         try:
             with self.microphone as source:
                 print("Listening...")
                 audio = self.recognizer.listen(source)
-
             print("Processing audio...")
-
-            # Get the raw audio bytes and convert them to a NumPy array
             audio_data = np.frombuffer(audio.get_raw_data(), dtype=np.int16).astype(np.float32) / 32768.0
-
-            # Transcribe the audio using the Whisper model
             result = model.transcribe(audio_data)
             return result["text"].strip()
-
         except Exception as e:
             print(f"Error recognizing speech: {e}")
             return ""
 
-    def _play_audio(self, audio_file):
-        """Play an audio file with fadeout support for interruption."""
+    @staticmethod
+    def _fade_out(sound, duration_ms):
+        """Manually fade out the audio by decreasing volume gradually over duration."""
+        if not sound:
+            return
+        total_steps = FADEOUT_STEPS
+        step_delay = duration_ms // total_steps
+        initial_volume = sound.get_volume()  # Get the current volume
+        volume_step = initial_volume / total_steps
+        for step in range(total_steps):
+            if not pygame.mixer.get_busy():  # If the sound is no longer playing, stop fading
+                break
+            new_volume = max(0, initial_volume - volume_step * (step + 1))
+            sound.set_volume(new_volume)  # Update the volume
+            pygame.time.wait(step_delay)  # Wait for the next step
+        sound.stop()  # Stop playback after the fade-out is complete
+
+    def read_text(self, text, call_before=None, call_back=None):
         try:
-            pygame.mixer.music.load(audio_file)
-            pygame.mixer.music.play()  # Start playing the audio
-
-            print(f"Playing audio: {audio_file}")
-
-            while pygame.mixer.music.get_busy():  # Audio is playing
-                if self.stop_playback_event.is_set():  # Check for fadeout request
-                    print("Fading out audio playback...")
-
-                    # Ensure fadeout completes over 2000ms
-                    fade_duration = 1000
-                    pygame.mixer.music.fadeout(fade_duration)  # Perform the fadeout
-                    sleep(fade_duration / 1000)  # Wait for the fadeout to finish
-
-                    # Ensure the music is stopped completely
-                    pygame.mixer.music.stop()
-                    pygame.mixer.music.unload()
-                    return
-
-                sleep(0.1)  # Reduce CPU usage by sleeping
-
-            # Stop playback fully after track finishes if no fadeout needed
-            pygame.mixer.music.stop()
-            pygame.mixer.music.unload()
-
+            tts = gTTS(text=text, lang='en')
+            audio_stream = io.BytesIO()
+            tts.write_to_fp(audio_stream)
+            audio_stream.seek(0)
+            if call_before:
+                call_before()
+            self.play_stream(audio_stream.read(), call_back=call_back)
         except Exception as e:
-            print(f"Error playing audio: {e}")
-        finally:
-            self.stop_playback_event.clear()  # Reset the fadeout flag
+            print(f"Error generating text-to-speech audio: {e}")
 
-    def _start_playback(self, audio_file, callback=None):
-        """Start audio playback in a new thread and interrupt any ongoing playback."""
-        if self.playback_thread and self.playback_thread.is_alive():
-            print("Stopping previous playback with fadeout...")
-            self.stop_playback_event.set()  # Trigger fadeout in the playback thread
-            self.playback_thread.join()  # Wait for the previous playback thread to terminate
+    def play_stream(self, audio_stream, call_back=None, fade_out_duration_ms=FADEOUT_DURATION_MS):
+        def playback_worker(stream):
+            try:
+                # Initialize sound stream
+                pygame.mixer.init()
+                pygame_sound = pygame.mixer.Sound(io.BytesIO(stream))
+                pygame_sound.set_volume(1.0)  # Start at full volume
+                pygame_sound.play()  # Start playback
+                print("Playing audio stream...")
 
-        # Reset the stop event for subsequent fadeout handling
-        self.stop_playback_event.clear()
+                while pygame.mixer.get_busy():  # Wait while audio is playing
+                    if self.stop_playback_event.is_set():  # Stop requested
+                        if call_back:
+                            call_back()
+                        self._fade_out(pygame_sound, fade_out_duration_ms)
+                        break
+                    pygame.time.wait(100)  # Wait before re-checking if sound is playing
+            except Exception as e:
+                print(f"Error during audio playback: {e}")
+            finally:
+                pygame.mixer.quit()  # Cleanup the mixer
+                self.stop_playback_event.clear()
+                # pygame.time.wait(1000)
 
-        # Start a new playback thread
-        self.playback_thread = threading.Thread(target=self._play_audio, args=(audio_file,), daemon=True)
+        self.playback_thread = threading.Thread(target=playback_worker, args=(audio_stream,), daemon=True)
         self.playback_thread.start()
 
-        # Start a cleanup thread to safely delete the temporary audio file
-        def cleanup(callback_f=callback):
-            self.playback_thread.join()  # Wait for playback to complete
-            try:
-                if callback_f:
-                    print('callback...')
-                    callback_f()
-                if os.path.exists(audio_file):  # Verify if file exists before removing
-                    os.remove(audio_file)
-                    print(f"Audio file {audio_file} deleted.")
-                else:
-                    print(f"Audio file {audio_file} already deleted or not found.")
-            except Exception as e:
-                print(f"Error deleting audio file {audio_file}: {e}")
+    def stop_sound(self, call_back=None):
+        with self.mixer_lock:
+            if not pygame.mixer.get_init():
+                print("Mixer not initialized — cannot stop sound.")
+                return
+            print(f"Stopping audio playback with fade-out...")
+            self.stop_playback_event.set()
+            if call_back:
+                call_back()
+            # Make sure we wait a bit longer than the fade
+            pygame.time.wait(FADEOUT_DURATION_MS + 100)
 
-        cleanup_thread = threading.Thread(target=cleanup, daemon=True)
-        cleanup_thread.start()
+    def shutdown(self):
+        """Cleanly shut down the mixer."""
+        with self.mixer_lock:
+            if pygame.mixer.get_init():
+                pygame.mixer.quit()
+                print("Pygame mixer shut down.")
 
-    def stop_sound(self):
-        """Stop the playback immediately and clear playback resources."""
-        print("Stopping audio playback...")
-        self.stop_playback_event.set()
-        if self.playback_thread and self.playback_thread.is_alive():
-            self.playback_thread.join()  # Wait for the playback thread to terminate
+    @staticmethod
+    def wait(duration_ms):
+        pygame.time.wait(duration_ms)
 
-        pygame.mixer.music.stop()
-        pygame.mixer.music.unload()  # Clear mixer cache
-        print("Playback stopped.")
+# Usage
+if __name__ == "__main__":
+    processor = SpeechProcessor()
 
-    def read_text(self, text, callbefore=None, callback=None):
-        """Convert the given text to speech and play it."""
-        if text:
-            try:
-                # Generate an audio file from text
-                audio_file = f"{uuid4().hex}.mp3"
-                tts = gTTS(text=text, lang='en', slow=False)
-                tts.save(audio_file)
-                if callbefore:
-                    print('callbefore...')
-                    callbefore()
-                # Start playing the audio in parallel
-                self._start_playback(audio_file, callback)
+    def test_playback():
+        print("Testing playback...")
+        processor.read_text("hmm... ooh... ahh... uhh.. aha... sure... oh... ok... yup... yes... right...")
+        pygame.time.wait(1000)
+        processor.stop_sound()
+        # pygame.time.wait(1000)
+        processor.read_text("This is a test. Let's see if the fade-out works properly.")
+        pygame.time.wait(WAIT_DURATION_MS)
+        processor.stop_sound()
+        # pygame.time.wait(WAIT_DURATION_MS)
+        processor.read_text("This is the second sound test. Let's see if the start of the second sound works properly.")
+        pygame.time.wait(WAIT_DURATION_MS)
+        processor.stop_sound()
+        # pygame.time.wait(WAIT_DURATION_MS)
+        processor.read_text("This is third test... works properly?")
 
-            except Exception as e:
-                print(f"Error during text-to-speech processing: {e}")
-        else:
-            print("No text provided to read.")
+
+    threading.Thread(target=test_playback, daemon=True).start()
+
+    while True:
+        pass

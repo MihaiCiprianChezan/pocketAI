@@ -29,12 +29,15 @@ class VoiceUtilApp(QObject):
 
     SLOW_GROW = {"factor": 1.1, "duration": 1500}
 
+    SHORT_CONFIRMS = ['hmm...', 'ooh...', 'ahh..', 'uhh..', 'aha...', 'sure...', 'oh...', 'ok...', 'yup...', 'yes...',
+                     'right...']
+
     def __init__(self):
         super().__init__()
         self.speech_processor = SpeechProcessor()
         self.in_write_mode = False
         self.buffer_text = ""
-        self.chatting = False
+        self.chatting = True
         self.chatbot = ChatBot()
         self.history = []
 
@@ -92,7 +95,7 @@ class VoiceUtilApp(QObject):
         print(f"Command tokens: {tokens}")
 
         if self.speech_processor.is_playing():
-            self.speech_processor.stop_sound()
+            self.speech_processor.stop_sound(call_back=self.emit_stop_pulsating)
 
         # self.send_command_to_ball.emit("reset_colorized", {})
         self.send_command_to_ball.emit("zoom_effect", {})
@@ -108,12 +111,12 @@ class VoiceUtilApp(QObject):
         #     self.buffer_text = ""
 
         elif self.get_command(tokens) == "note note":
-            self.speech_processor.read_text("Edit Mode, your words will be written!")
+            self.speech_processor.read_text("Edit Mode, write with words!", call_before=self.emit_start_pulsating, call_back=self.emit_stop_pulsating)
             self.emit_change_color(self.YELLOW)
             self.in_write_mode = True
 
         elif self.get_command(tokens) == "done note":
-            self.speech_processor.read_text("Closing Edit mode...")
+            self.speech_processor.read_text("Closing Edit mode...", call_before=self.emit_start_pulsating, call_back=self.emit_stop_pulsating)
             self.in_write_mode = False
             self.emit_reset_colorized()
 
@@ -144,10 +147,9 @@ class VoiceUtilApp(QObject):
             print("Chat mode deactivated.")
 
         elif self.get_command(tokens) == "stop stop" or self.get_command(tokens) == "hold on":
-            self.speech_processor.stop_sound()
-            short_confirm = ['aha..', 'ok..', 'yup..', 'yes...', 'al right...']
-            random_response = random.choice(short_confirm)
-            self.speech_processor.read_text(random_response)
+            self.speech_processor.stop_sound(call_back=self.emit_stop_pulsating)
+            random_response = random.choice(self.SHORT_CONFIRMS)
+            self.speech_processor.read_text(random_response, call_before=self.emit_start_pulsating, call_back=self.emit_stop_pulsating)
 
         # --- READ selected texts
         elif self.get_command(tokens) == "read this":
@@ -156,7 +158,7 @@ class VoiceUtilApp(QObject):
                 sleep(0.5)
                 text = pyperclip.paste()
                 self.emit_change_color(self.GREEN)
-                self.speech_processor.read_text(text, self.emit_start_pulsating, self.emit_stop_pulsating)
+                self.speech_processor.read_text(text, call_before=self.emit_start_pulsating, call_back=self.emit_stop_pulsating)
             else:
                 print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
@@ -173,9 +175,9 @@ class VoiceUtilApp(QObject):
 
         elif self.is_command(tokens, ["exit", "exit"]):
             try:
-                self.speech_processor.read_text("Good bye!")
+                self.speech_processor.read_text("Good bye!", call_before=self.emit_start_pulsating, call_back=self.emit_stop_pulsating)
                 print("Exiting the program...")
-                self.speech_processor.stop_sound()
+                self.speech_processor.stop_sound(call_back=self.emit_stop_pulsating)
                 self.emit_exit()
                 sys.exit(0)
             except Exception as e:
@@ -185,17 +187,26 @@ class VoiceUtilApp(QObject):
             if self.in_write_mode:
                 self.write_text(spoken)
             # Normal chat if bot name was mentioned or if active chat is on
+            # TODO: add if bot_speaking then interrupt
             if self.chatting or is_for_bot:
                 self.color_chatbot(spoken)
 
     def color_chatbot(self, spoken_prompt):
-        self.emit_zoom_effect(self.SLOW_GROW)
+        # self.emit_zoom_effect(self.SLOW_GROW)
         self.emit_change_color(self.MAGENTA)
 
         print(f"[USER prompt]: {spoken_prompt}")
-        response = self.chatbot.chat(self.history, spoken_prompt)
-        print(f"[AI response]: {response}")
+        print(f"[AI response]:", end="")
+        response = ""
 
+        response_iter = self.chatbot.chat(self.history, spoken_prompt, return_iter=True)
+        for partial_response in response_iter:
+            if response != partial_response:
+                diff = partial_response.replace(response, "")
+                response += diff
+                if diff:
+                    print(f"{diff}", end="")
+        # print(f"\n[Full AI response]: {response}")
         self.speech_processor.read_text(response, self.emit_start_pulsating, self.emit_stop_pulsating)
 
     def emit_zoom_effect(self, zoom):
@@ -206,14 +217,14 @@ class VoiceUtilApp(QObject):
 
     def emit_start_pulsating(self):
         self.emit_change_color(self.BLUE)
-        self.send_command_to_ball.emit("start_pulsating", {})
+        # self.send_command_to_ball.emit("start_pulsating", {})
 
     def emit_reset_colorized(self):
         self.send_command_to_ball.emit("reset_colorized", {})
 
     def emit_stop_pulsating(self):
         """Stop pulsating the ball."""
-        self.send_command_to_ball.emit("stop_pulsating", {})
+        # self.send_command_to_ball.emit("stop_pulsating", {})
         self.emit_reset_colorized()
 
     def emit_exit(self):

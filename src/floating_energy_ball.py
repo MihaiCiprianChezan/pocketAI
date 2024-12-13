@@ -15,6 +15,7 @@ class FloatingEnergyBall(QWidget):
         super().__init__()
 
         # Configure the transparent, frameless overlay window
+        self.pulsating = None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setStyleSheet("background: transparent;")  # Fully transparent widget
@@ -52,8 +53,6 @@ class FloatingEnergyBall(QWidget):
             self.stop_pulsating(command, params)
         elif command == "zoom_effect":
             self.zoom_effect_wrapper(command, params)
-        elif command == "reset_colorized":
-            self.reset_colorized(command, params)
         elif command == "exit":
             QCoreApplication.quit()
 
@@ -231,7 +230,7 @@ class FloatingEnergyBall(QWidget):
             self.pulse_timer = QTimer(self)
 
         # Define the pulsate animation logic
-        def single_pulse(zoom_factor=1.1):
+        def single_pulse(zoom_factor=1.03, duration=1000):
             if not self.pulsating:  # Stop if pulsating was toggled off
                 return
 
@@ -243,7 +242,7 @@ class FloatingEnergyBall(QWidget):
             animation = QVariantAnimation(self)
             animation.setStartValue(QSize(original_width, original_height))  # Start at original size
             animation.setEndValue(QSize(zoomed_width, zoomed_height))  # End at zoomed size
-            animation.setDuration(500)  # Duration of each pulse (grow-shrink cycle)
+            animation.setDuration(duration)  # Duration of each pulse (grow-shrink cycle)
 
             def resize_frames(size):
                 self.movie.setScaledSize(size)  # Resize the QMovie dynamically
@@ -255,10 +254,10 @@ class FloatingEnergyBall(QWidget):
             animation.start()
 
         # Schedule the next pulse with random intervals
-        def schedule_next_pulse():
+        def schedule_next_pulse(rand_a=50, rand_b=100):
             if self.pulsating:  # Continue pulsating
                 single_pulse()
-                random_delay = random.randint(50, 100)  # Add a random delay (500ms to 1000ms)
+                random_delay = random.randint(rand_a, rand_b)  # Add a random delay (500ms to 1000ms)
                 self.pulse_timer.start(random_delay)
 
         # Connect the timer timeout to the schedule function
