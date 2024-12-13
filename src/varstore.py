@@ -134,10 +134,34 @@ POLITE_RESPONSES = [
     "We can communicate better with respectful language."
 ]
 
+ACKNOWLEDGEMENTS = [
+    "Got it!",
+    "Sure thing!",
+    "Okay!",
+    "Alright!",
+    "Understood!",
+    "Noted!",
+    "Will do!",
+    "Absolutely!",
+    "Roger that!",
+    "Affirmative!",
+    "Yes!",
+    "Right away!",
+    "Sounds good!",
+    "I see!",
+    "Acknowledged!",
+    "Okay then!",
+    "Great!",
+    "Perfect!",
+    "Sure!"
+]
 
-# Glitches in voice recognizer
+
+# Glitches in voice recognizer got no clue how those are generated may be some glitches in the model
 GLITCHES = [
     "I'm going to go to the next room",
     "1.5% 1.5% 1.5% 1.5% 1.5%"
+    "I'm going to get the right"
+    "I'm going to get you a little bit more"
 ]
 

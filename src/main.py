@@ -13,7 +13,7 @@ from energy_ball import EnergyBall
 from speech_processor import SpeechProcessor
 from utils import is_recog_glitch, get_unique_choice, is_prompt_valid
 from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
-    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES
+    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS
 
 
 class VoiceApp(QObject):
@@ -89,6 +89,7 @@ class VoiceApp(QObject):
         spoken, clean, is_for_bot = self.is_for_bot(spoken, clean)
         tokens = clean.split()
         print(f"[Prompt is valid]: {prompt_is_valid}")
+        print(f"[Is for BOT]  : {is_for_bot}")
         print(f"[Prompt tokens]  : {tokens}")
         print(f"[AI is speaking] : {self.chatbot_speaking}")
         # Delegate write-mode or general commands
@@ -96,7 +97,7 @@ class VoiceApp(QObject):
             if not self.handle_write_mode_commands(tokens, spoken):
                 # If no specific write mode command, fallback to writing spoken text
                 self.write_text(spoken)
-        elif not self.handle_general_commands(tokens, is_for_bot):
+        elif not self.handle_general_commands(tokens, self.chatting or is_for_bot):
             # If no general commands are recognized, handle fallback for general mode
             if (not self.chatbot_speaking) and (self.chatting or is_for_bot) and prompt_is_valid:
                 self.get_ai_response(spoken)
@@ -124,14 +125,14 @@ class VoiceApp(QObject):
         commands = {
             ("enter", "edit", "mode"): self.activate_write_mode,
             ("exit", "edit", "mode"): self.deactivate_write_mode,
-            ("start", "chat"): self.start_chat,
+            ("start", "chat", "mode"): self.start_chat,
             ("pause", "chat"): self.pause_chat,
-            ("stop", "chat"): self.stop_chat,
+            ("stop", "chat", "mode"): self.stop_chat,
             ("wait", "stop"): self.handle_stop_command,
             ("wait", "wait"): self.handle_stop_command,
             ("stop", "stop"): self.handle_stop_command,
             ("hold", "on"): self.handle_stop_command,
-            ("read", "this", "please"): lambda: self.read_selected_text(is_for_bot),
+            ("read", "this"): lambda: self.read_selected_text(is_for_bot),
             ("explain", "this"): lambda: self.explain_selected_text(is_for_bot),
             ("exit", "exit"): self.exit_app,
         }
@@ -197,21 +198,25 @@ class VoiceApp(QObject):
     def read_selected_text(self, is_for_bot):
         """Read the selected text."""
         if is_for_bot:
+            self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             keyboard.send("ctrl+c")  # Copy selected text
             sleep(0.1)
             text = pyperclip.paste()
             self.ball_change_color(self.OPERATING_TEXT)
-            self.speech_processor.read_text(text, call_before=None, call_back=None)
+            self.speak(text)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call Assistant by name.")
 
     def explain_selected_text(self, is_for_bot):
         """Explain the selected text."""
         if is_for_bot:
+            self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             keyboard.send("ctrl+c")
-            sleep(0.5)
+            sleep(0.1)
             copied_text = pyperclip.paste()
-            prompt = f"Explain this to me: {copied_text}"
+            prompt = f"Please explain this: {copied_text}"
             self.get_ai_response(prompt)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
