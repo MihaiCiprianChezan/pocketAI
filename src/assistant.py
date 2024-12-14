@@ -2,7 +2,7 @@ from threading import Thread, Lock
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 
 
-class ChatBot:
+class ChatAssistant:
     def __init__(self, model_name="THUDM/glm-edge-1.5b-chat", device_map="auto"):
         # Initialize lock
         self.history_lock = Lock()
@@ -10,7 +10,8 @@ class ChatBot:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map)
 
-    def preprocess_messages(self, history):
+    @staticmethod
+    def preprocess_messages(history):
         messages = []
         for idx, (user_msg, model_msg) in enumerate(history):
             if idx == len(history) - 1 and not model_msg:
@@ -23,7 +24,14 @@ class ChatBot:
 
         messages.append({
             "role": "system",
-            "content": "You are Opti, a friendly and engaging AI assistant. Provide brief and natural language responses, each under 256 characters. Communicate like a natural live chat, avoiding numbered lists. Maintain a warm and engaging tone throughout. Greeting have already been provided before engaging in chat avoid using greetings."
+            "content": (
+                "You are Opti, a friendly AI assistant. "
+                "Provide concise, natural responses. "
+                "Summarize responses in 256 characters or less when possible. "
+                "Use a warm, engaging, live chat tone. "
+                "Respond in continuous paragraphs, avoid lists."
+                "Do not salute or greet the user (consider salutations have already been done before)."
+            )
         })
 
         return messages
@@ -71,14 +79,14 @@ class ChatBot:
         t.join()
         return response
 
-    def chat(self, history, message, return_iter=False):
+    def get_response(self, history, message, return_iter=True):
         """
         Get the entire response at once
-        response = self.chat(history, "Hello!")
+        response = self.get_response(history, "Hello!")
         print(response) > Final output as a single string
 
         Get the response incrementally as an iterator
-        response_stream = self.chat(history, "Hello!", return_iter=True)
+        response_stream = self.get_response(history, "Hello!", return_iter=True)
         for partial_response in response_stream:
         print(partial_response)  >  intermediate updates as they are generated
         """

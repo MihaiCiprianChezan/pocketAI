@@ -2,18 +2,20 @@ import random
 import sys
 import threading
 import time
+import traceback
 from time import sleep
 import keyboard
 import pyperclip
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 from better_profanity import profanity
-from chat_bot import ChatBot
+from assistant import ChatAssistant
 from energy_ball import EnergyBall
 from speech_processor_ttsx import SpeechProcessorTTSX
-from utils import is_recog_glitch, get_unique_choice, is_prompt_valid
+from utils import is_recog_glitch, get_unique_choice, is_prompt_valid, clean_response
 from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
-    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES
+    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES, WAITING_SOUNDS, \
+    UNCLEAR_PROMPT_RESPONSES
 
 
 class VoiceApp(QObject):
@@ -32,8 +34,8 @@ class VoiceApp(QObject):
         self.in_write_mode = False
         self.buffer_text = ""
         self.chatting = True
-        self.chatbot = ChatBot()
-        self.chatbot_speaking = False
+        self.chat_assistant = ChatAssistant()
+        self.assistant_speaking = False
         self.history = []
         self.previous_expression = None
         self.speech_processor.read_text(random.choice(HELLOS), call_before=None, call_back=None)
@@ -53,7 +55,7 @@ class VoiceApp(QObject):
         """Write the text dynamically with a slight delay."""
         keyboard.write(text, delay=0.05)
 
-    def is_for_bot(self, spoken, clean, for_bot_attention=False):
+    def is_for_assistant(self, spoken, clean, for_bot_attention=False):
         name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
         is_addressed = any(variant in clean or variant in spoken.lower() for variant in name_variants)
         if is_addressed:
@@ -80,28 +82,58 @@ class VoiceApp(QObject):
 
     def process_command(self, spoken, clean):
         """Process voice commands and handle them using helper methods."""
-        if profanity.contains_profanity(spoken):
-            print(f"Profanity detected: {spoken}")
+        # check if prompt makes sense
+
+        prompt_is_valid = is_prompt_valid(spoken, clean)
+        if not prompt_is_valid:
+            print(f"<!> Prompt is not valid: {spoken}")
+            self.previous_expression = get_unique_choice(UNCLEAR_PROMPT_RESPONSES, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+            return
+
+        # check if prompt is a profanity/vulgarity
+        prompt_is_profanity = profanity.contains_profanity(spoken)
+        if prompt_is_profanity:
+            print(f"<!> Profanity detected: {profanity.censor(spoken)}")
             self.previous_expression = get_unique_choice(POLITE_RESPONSES, self.previous_expression)
             self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             return
-        prompt_is_valid = is_prompt_valid(spoken, clean)
-        spoken, clean, is_for_bot = self.is_for_bot(spoken, clean)
+
+        spoken, clean, addresses_assistant = self.is_for_assistant(spoken, clean)
         tokens = clean.split()
-        print(f"[Prompt is valid]: {prompt_is_valid}")
-        print(f"[Is for BOT]  : {is_for_bot}")
-        print(f"[Prompt tokens]  : {tokens}")
-        print(f"[AI is speaking] : {self.chatbot_speaking}")
-        # Delegate write-mode or general commands
+
+        print(f"(i) Prompt is VALID, [{len(tokens)} tokens]: {tokens}")
+
+        if self.assistant_speaking:
+            print(f"<!> Assistant is currently speaking. Stopping current speech ...")
+
+        self.speech_processor.stop_sound()
+        self.assistant_speaking = False
+
+        if addresses_assistant:
+            print(f"(i) Prompt is addressed to the Assistant (mentions Assistant name).")
+
+        # write-mode
         if self.in_write_mode:
-            if not self.handle_write_mode_commands(tokens, spoken):
-                # If no specific write mode command, fallback to writing spoken text
-                self.write_text(spoken)
-        elif not self.handle_general_commands(tokens, self.chatting or is_for_bot):
-            # If no general commands are recognized, handle fallback for general mode
-            # pass
-            if (not self.chatbot_speaking) and (self.chatting or is_for_bot) and prompt_is_valid:
-                self.get_ai_response(spoken)
+            if self.handle_write_mode_commands(tokens, spoken):
+                return
+            # writing spoken text
+            self.write_text(spoken)
+                
+        else:
+            # general commands
+            if self.handle_general_commands(tokens, self.chatting or addresses_assistant):
+                return
+
+            # chatting with the assistant
+            if self.chatting or addresses_assistant:
+                response = self.get_ai_response(spoken)
+                if response:
+                    self.assistant_speaking = True
+                    print(f"[Assistant final response]: {response}")
+                    self.speech_processor.read_text(response)
+                    # self.speak(response)
+
 
     def handle_write_mode_commands(self, tokens, spoken):
         """Handle commands in write mode and return True if a command was handled."""
@@ -121,7 +153,7 @@ class VoiceApp(QObject):
                 return True  # Command was handled
         return False  # No command matched, fallback to write the spoken text
 
-    def handle_general_commands(self, tokens, is_for_bot):
+    def handle_general_commands(self, tokens, is_for_assistant):
         """Handle commands that are not related to write mode and return True if a command was handled."""
         commands = {
             ("enter", "edit", "mode"): self.activate_write_mode,
@@ -133,13 +165,13 @@ class VoiceApp(QObject):
             ("wait", "wait"): self.handle_stop_command,
             ("stop", "stop"): self.handle_stop_command,
             ("hold", "on"): self.handle_stop_command,
-            ("read", "this"): lambda: self.read_selected_text(is_for_bot),
-            ("explain", "this"): lambda: self.explain_selected_text(is_for_bot),
-            ("translate", "to", "english"): lambda: self.translate_selected_text(is_for_bot, 'en'),
-            ("translate", "to", "french"): lambda: self.translate_selected_text(is_for_bot, 'fr'),
-            ("translate", "to", "german"): lambda: self.translate_selected_text(is_for_bot, 'de'),
-            ("translate", "to", "spanish"): lambda: self.translate_selected_text(is_for_bot, 'es'),
-            ("translate", "to", "swedish"): lambda: self.translate_selected_text(is_for_bot, 'sv'),
+            ("read", "this"): lambda: self.read_selected_text(is_for_assistant),
+            ("explain", "this"): lambda: self.explain_selected_text(is_for_assistant),
+            ("translate", "to", "english"): lambda: self.translate_selected_text(is_for_assistant, 'en'),
+            ("translate", "to", "french"): lambda: self.translate_selected_text(is_for_assistant, 'fr'),
+            ("translate", "to", "german"): lambda: self.translate_selected_text(is_for_assistant, 'de'),
+            ("translate", "to", "spanish"): lambda: self.translate_selected_text(is_for_assistant, 'es'),
+            ("translate", "to", "swedish"): lambda: self.translate_selected_text(is_for_assistant, 'sv'),
             ("exit", "exit"): self.exit_app,
         }
 
@@ -196,25 +228,28 @@ class VoiceApp(QObject):
 
     def handle_stop_command(self):
         """Handle 'stop' or 'hold on' commands."""
-        if self.chatbot_speaking:
-            print("Chatbot is speaking, stopping chatbot ...")
-            self.chatbot_speaking = False
-            self.speech_processor.stop_sound()
-            self.speech_processor.wait(self.speech_processor.FADEOUT_DURATION_MS + 50)
-            self.previous_expression = get_unique_choice(SHORT_CONFIRMS, self.previous_expression)
-            self.speech_processor.read_text(
-                self.previous_expression,
-                call_before=None,
-                call_back=self.ball_stop_pulsating
-            )
+        if self.assistant_speaking:
+            try:
+                print("<!> Assistant is speaking! stopping ...")
+                print("(i) Saying a short confirmation ...")
+                self.assistant_speaking = False
+                self.speech_processor.stop_sound()
+                self.read_unique(SHORT_CONFIRMS)
+                self.speech_processor.read_text(
+                    self.previous_expression,
+                    call_before=None,
+                    call_back=self.ball_stop_pulsating
+                )
+                print("(i) Reading text interrupted ...")
+            except Exception as e:
+                print(f"Error stopping: {e}, {traceback.format_exc()}")
             return
-        print("Chatbot is not currently speaking, no reason to stop...")
+        print("(i) Assistant not currently speaking, no reason to stop...")
 
-    def read_selected_text(self, is_for_bot):
+    def read_selected_text(self, is_for_assistant):
         """Read the selected text."""
-        if is_for_bot:
-            self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
-            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+        if is_for_assistant:
+            self.read_unique(ACKNOWLEDGEMENTS)
             keyboard.send("ctrl+c")  # Copy selected text
             sleep(0.3)
             text = pyperclip.paste()
@@ -223,25 +258,23 @@ class VoiceApp(QObject):
         else:
             print("(i) Not in chat mode. Please activate chat mode or call Assistant by name.")
 
-    def explain_selected_text(self, is_for_bot):
+    def explain_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""
-        if is_for_bot:
-            self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
-            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+        if is_for_assistant:
+            self.read_unique(ACKNOWLEDGEMENTS)
             keyboard.send("ctrl+c")
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
             prompt = f"Please explain this: `{copied_text}`"
-            self.get_ai_response(prompt)
+            self.speak(self.get_ai_response(prompt, lang=lang), lang=lang)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
-    def translate_selected_text(self, is_for_bot, lang="en"):
+    def translate_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""
-        if is_for_bot:
-            self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
-            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+        if is_for_assistant:
+            self.read_unique(ACKNOWLEDGEMENTS)
             keyboard.send("ctrl+c")
             sleep(0.3)
             copied_text = pyperclip.paste()
@@ -249,15 +282,14 @@ class VoiceApp(QObject):
             print(f" [Translation to {lang}:language] of: {copied_text}")
             prompt = f"Detect the language of the text and translate it to {language} language, reply only the translation. Text to translate into {language} language: `{copied_text}`\n"
             print(f" [Translation prompt]: {prompt}")
-            self.get_ai_response(prompt, lang=lang)
+            self.speak(self.get_ai_response(prompt, lang=lang), lang=lang)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
     def exit_app(self):
         """Exit the application gracefully."""
         try:
-            self.previous_expression = get_unique_choice(GOODBYES, self.previous_expression)
-            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+            self.read_unique(GOODBYES)
             print("Exiting the program...")
             self.speech_processor.stop_sound(call_back=None)
             self.emit_exit()
@@ -265,13 +297,17 @@ class VoiceApp(QObject):
         except Exception as e:
             print(f"Error exiting: {e}, {e.__traceback__}")
 
+    def read_unique(self, expression_list):
+        self.previous_expression = get_unique_choice(expression_list, self.previous_expression)
+        self.speech_processor.read_text(self.previous_expression)
+
     def get_ai_response(
             self,
             spoken_prompt,
-            colour=SPEAKING,
+            colour=GENERATING,
             min_interval=2.0,  # Minimum interval in seconds
             max_interval=5.0,  # Maximum interval in seconds
-            entertain_messages=THINKING_SOUNDS,  # List of random messages
+            entertain=True,
             lang="en"
     ):
         """
@@ -279,27 +315,28 @@ class VoiceApp(QObject):
         Will also progressively print in the console the full response from the AI model.
         Once the response from the AI model is received, it will be spoken out loud.
         """
-        self.ball_change_color(self.GENERATING)
         print(f"[USER prompt]: {spoken_prompt}")
-        print(f"[AI response]:", end="")
-        response = ""
-        response_iter = self.chatbot.chat(self.history, spoken_prompt, return_iter=True)
-        # Initialize time tracking
-        if entertain_messages:
-            last_update_time, random_interval = self._initialize_time(min_interval, max_interval)
-        for partial_response in response_iter:
-            # Update and print partial response
-            response = self._update_response(response, partial_response)
-            # Entertain the user periodically
-            if entertain_messages:
-                if self._should_entertain(last_update_time, random_interval):
-                    last_update_time, random_interval = self._entertain_user(
-                        entertain_messages, min_interval, max_interval
-                    )
 
-        print(f"\n")
         self.ball_change_color(colour)
-        self.speak(response, lang=lang)
+        self.read_unique(ACKNOWLEDGEMENTS)
+        if entertain:
+             last_update_time, random_interval = self._initialize_time(2, 5)
+
+        response = ""
+        response_iter = self.chat_assistant.get_response(self.history, spoken_prompt)
+        # print(f"[AI response]:", end="")
+        for partial_response in response_iter:
+            response = self._update_response(response, partial_response)
+
+        if entertain and self._should_entertain(last_update_time, random_interval):
+            last_update_time, random_interval = self._entertain_user(
+                WAITING_SOUNDS, min_interval, max_interval
+            )
+
+        # print(f"\n")
+        return clean_response(response)
+        # self.ball_change_color(colour)
+        # self.speak(response, lang=lang)
 
     # ------------------------- Helper Functions -------------------------
 
@@ -316,7 +353,7 @@ class VoiceApp(QObject):
             response += diff
             if diff:
                 self.ball_zoom_effect()
-                print(f"{diff}", end="")
+                # print(f"{diff}", end="")
         return response
 
     def _should_entertain(self, last_update_time, random_interval):
@@ -329,20 +366,21 @@ class VoiceApp(QObject):
         Returns: tuple: Updated last_update_time and random_interval.
         """
         self.previous_expression = get_unique_choice(entertain_messages, self.previous_expression)
-        self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+        self.speech_processor.read_text(self.previous_expression)
         return self._initialize_time(min_interval, max_interval)
 
     # --------------------- Energy ball related ----------------------------
 
     def speak(self, speech_script, lang="en"):
-        self.chatbot_speaking = True
+        self.assistant_speaking = True
         self.ball_start_pulsating()
+        self.speech_processor.stop_sound()
         self.speech_processor.read_text(speech_script, call_back=self.speak_callback, lang=lang)
 
     def speak_callback(self):
-        self.speech_processor.stop_sound(call_back=None)
+        # self.speech_processor.stop_sound(call_back=None)
         self.ball_stop_pulsating()
-        self.chatbot_speaking = False
+        self.assistant_speaking = False
 
     def make_silence(self):
         self.speech_processor.stop_sound(call_back=self.ball_stop_pulsating)

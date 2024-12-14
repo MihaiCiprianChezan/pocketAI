@@ -1,5 +1,5 @@
 import random
-
+import re
 from varstore import GLITCHES
 
 def is_recog_glitch(spoken, glitches=GLITCHES):
@@ -9,7 +9,7 @@ def is_recog_glitch(spoken, glitches=GLITCHES):
     return False
 
 
-def is_prompt_valid(spoken, clean, min_tokens=3, min_chars=10, min_unique_tokens=2, vulgarities_list=None):
+def is_prompt_valid(spoken, clean, min_tokens=2, min_chars=5, min_unique_tokens=1, vulgarities_list=None):
     if not clean.strip():
         return False
     token_count = len(clean.split())
@@ -48,3 +48,47 @@ def get_unique_choice(options, last_choice=None):
         new_choice = random.choice(options)
     last_choice = new_choice
     return new_choice
+
+def clean_response(llm_response):
+    """
+    Cleans a response from an LLM model by:
+    - Removing newlines
+    - Stripping emojis
+    - Removing leading/trailing whitespaces
+    - Optionally performing further text sanitizations
+
+    Parameters:
+    - llm_response (str): The response text from the LLM.
+
+    Returns:
+    - str: The cleaned response.
+    """
+    if not isinstance(llm_response, str):
+        raise ValueError("Input must be a string")
+
+    # Remove newlines and replace with a single space
+    cleaned_text = llm_response.replace('\n', ' ')
+
+    # Strip emojis using a regex pattern
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # Emoticons
+        "\U0001F300-\U0001F5FF"  # Symbols & Pictographs
+        "\U0001F680-\U0001F6FF"  # Transport & Map Symbols
+        "\U0001F700-\U0001F77F"  # Alchemical Symbols
+        "\U0001F780-\U0001F7FF"  # Geometric Shapes Extended
+        "\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
+        "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        "\U0001FA00-\U0001FA6F"  # Chess Symbols
+        "\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
+        "\U00002702-\U000027B0"  # Dingbats
+        "\U000024C2-\U0001F251"  # Enclosed Characters
+        "]+",
+        flags=re.UNICODE,
+    )
+    cleaned_text = emoji_pattern.sub('', cleaned_text)
+
+    # Strip leading and trailing whitespaces
+    cleaned_text = cleaned_text.strip()
+
+    return cleaned_text

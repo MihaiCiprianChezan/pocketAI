@@ -111,6 +111,29 @@ THINKING_SOUNDS = [
     "Oh..."
 ]
 
+WAITING_SOUNDS = [
+    "Just a sec...",
+    "Still thinking...",
+    "Answer is on the way...",
+    "Hang tight...",
+    "One moment please...",
+    "Calculating...",
+    "Just a bit longer...",
+    "Stay with me...",
+    "Preparing your answer...",
+    "Almost there...",
+    "Don't go anywhere...",
+    "Hold on...",
+    "Fetching information...",
+    "Gathering data...",
+    "Let me see...",
+    "Processing...",
+    "Working on it...",
+    "In progress...",
+    "Give me a moment...",
+    "Coming right up..."
+]
+
 POLITE_RESPONSES = [
     "Oh, that's colorful. Let's keep it respectful.",
     "Well, that escalated quickly. Let's tone it down a notch.",
@@ -197,3 +220,26 @@ VOICES = {
     "Microsoft Katja (Natural)": {"language": "German (Germany)"},
     "Microsoft Xiaoxiao (Natural)": {"language": "Chinese (Simplified, China)"}
 }
+
+UNCLEAR_PROMPT_RESPONSES = [
+    "What?",
+    "Huh?",
+    "Pardon?",
+    "Sorry?",
+    "Come again?",
+    "Explain?",
+    "Repeat?",
+    "Clarify?",
+    "Say again?",
+    "Meaning?",
+    "Details?",
+    "Sorry, what?",
+    "Eh?",
+    "What now?",
+    "Can you?",
+    "Repeat that?",
+    "More info?",
+    "Missed that.",
+    "How so?",
+    "Once more?"
+]

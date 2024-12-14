@@ -1,26 +1,18 @@
 import io
 import threading
+import time
+import traceback
 import warnings
 import numpy as np
 import pyttsx3
 import speech_recognition as sr
 import torch
-import whisper
 import vosk
 import pyaudio
 import json
 
-warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
-warnings.filterwarnings("ignore",
-                        message="Some parameters are on the meta device because they were offloaded to the cpu.")
-warnings.filterwarnings("ignore", category=FutureWarning)
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
-
-# Initialize the Whisper model (for transcription if needed)
-model = whisper.load_model("base", device=device)
-model = model.to(device)
 
 
 class SpeechProcessorTTSX:
@@ -44,26 +36,23 @@ class SpeechProcessorTTSX:
         self.mixer_lock = threading.Lock()  # not really useful but existing in original version so added for compatibility
 
         # Vosk Initialization (from the second example)
-        self.recognition_model_path = "../models/vosk-model-en-us-daanzu-20200905-lgraph"
+        self.recognition_model_path = "../models/vosk-model-small-en-us-0.15"  # Smaller and Faster
+        # self.recognition_model_path = "../models/vosk-model-en-us-0.22-lgraph"  # Bigger but more accurate
         try:
             self.model = vosk.Model(self.recognition_model_path)
             self.recognizer_vosk = vosk.KaldiRecognizer(self.model, 16000)
         except Exception as e:
-            print(f"Error initializing Vosk: {e}")
-            self.model = None  # Indicate Vosk initialization failed
+            print(f"Error initializing Vosk: {e}, {traceback.format_exc()}")
+            self.model = None
 
         self.set_voice(self.DEFAULT_VOICE)  # Initialize voice after listing
         self.set_rate(self.DEFAULT_RATE)
-
-    def _initialize_mixer(self):
-        """Dummy method for compatibility."""
-        return True
 
     def is_playing(self):
         try:
             return self.engine.isBusy()
         except Exception as e:
-            print(f"Error checking pyttsx3 engine status: {e}")
+            print(f"Error checking pyttsx3 engine status: {e}, {traceback.format_exc()}")
             return False
 
     def _list_voices(self):
@@ -117,7 +106,7 @@ class SpeechProcessorTTSX:
                         print(f"Recognized: {text}")
                         return text
         except Exception as e:
-            print(f"Vosk recognition error: {e}")
+            print(f"Vosk recognition error: {e}, {traceback.format_exc()}")
             return ""
         finally:
             if stream:
@@ -125,28 +114,15 @@ class SpeechProcessorTTSX:
                 stream.close()
             audio_interface.terminate()
 
-    def recognize_speech_whisper(self):
-        try:
-            with self.microphone as source:
-                print("Listening for speech (Whisper)...")
-                audio = self.recognizer.listen(source)
-            print("Processing audio...")
-            audio_data = np.frombuffer(audio.get_raw_data(), dtype=np.int16).astype(np.float32) / 32768.0
-            result = model.transcribe(audio_data)
-            text = result["text"].strip()
-            print(f"Recognized: {text}")
-            return text
-        except Exception as e:
-            print(f"Whisper recognition error: {e}")
-            return ""
-
     def _fade_out(self, sound, duration_ms):
         """Dummy method for compatibility."""
         pass
 
     def read_text(self, text, call_before=None, call_back=None, lang="en"):
+        ###### The inner threaded read text function
         def _read_text_inner(text_to_read):
             try:
+                print("(i) _read_text_inner() Started reading ...")
                 if call_before:
                     call_before()  # Pre-speech actions
 
@@ -161,20 +137,32 @@ class SpeechProcessorTTSX:
                     call_back()  # Post-speech actions
 
             except Exception as e:
-                print(f"Error during text reading: {e}")
+                print(f"Error during text reading: {e}, {traceback.format_exc()}")
                 self.stop_playback_event.clear()  # Ensure it's cleared on error
 
+        ###### //// End of inner read text function
+
+        # Ensure no playback is ongoing before starting
         if self.playback_thread and self.playback_thread.is_alive():
-            self.stop_sound(lambda: self.read_text(text, call_before, call_back, lang))  # Queue next text
-        else:
-            self.playback_thread = threading.Thread(target=_read_text_inner, args=(text,), daemon=True)
-            self.stop_playback_event.clear()
-            self.playback_thread.start()
+            print("<!> Playback already in progress, stopping current playback...")
+            self.stop_sound()  # Signal the thread to stop
+            if self.playback_thread:
+                self.playback_thread.join()  # Wait for the playback thread to finish
+            if self.playback_thread and self.playback_thread.is_alive():
+                self.wait(100)
+            print("<!> Previous playback stopped successfully.")
+
+        # Start a new playback thread
+        print("(i) Starting new playback...")
+        self.playback_thread = threading.Thread(target=_read_text_inner, args=(text,), daemon=True)
+        self.stop_playback_event.clear()
+        self.playback_thread.start()
 
     def stop_sound(self, call_back=None):
         self.stop_playback_event.set()  # Signal the thread to stop
-        if self.playback_thread:
-            self.playback_thread.join()  # Correctly placed join call. Waits until current speech finishes or stops.
+        # Check if the playback thread is different from the current thread
+        if self.playback_thread and self.playback_thread.is_alive() and threading.current_thread() != self.playback_thread:
+            self.playback_thread.join()  # Wait for the playback thread to finish
             self.playback_thread = None  # Reset the thread variable after joining
 
         if call_back:
@@ -190,60 +178,6 @@ class SpeechProcessorTTSX:
         import time
         time.sleep(duration_ms / 1000)
 
-#
-# # Usage example
-# if __name__ == "__main__":
-#     processor = SpeechProcessorTTSX()
-#
-#
-#     def test_playback():
-#         print("Testing playback...")
-#
-#         # print("Available Voices:")
-#         # processor.list_voices()
-#         #
-#         # # Change voice dynamically
-#         # # processor.set_voice("Microsoft Sonia (Natural)")
-#         # processor.read_text("The voice has been changed to Microsoft Sonia.")
-#         #
-#         # # Change speech rate dynamically
-#         # processor.set_rate(200)
-#         # processor.read_text("The speech rate has been increased to 200 words per minute.")
-#         #
-#         # # Reset to default voice and rate
-#         # processor.set_voice(processor.DEFAULT_VOICE)
-#         # processor.set_rate(processor.DEFAULT_RATE)
-#         # processor.read_text("We are now using the default configuration again.")
-#         #
-#
-#         try:
-#             processor.read_text("hmm... ooh... ahh... uhh.. aha... sure... oh... ok... yup... yes... right...")
-#             processor.wait(1000)
-#             processor.stop_sound()
-#
-#             processor.read_text("This is a test. Let's see if the fade-out works properly.")
-#             processor.wait(processor.WAIT_DURATION_MS)
-#             processor.stop_sound()
-#
-#             processor.read_text("This is the second sound test. Let's see if the start of the second sound works properly.")
-#             processor.wait(processor.WAIT_DURATION_MS)
-#             processor.stop_sound()
-#
-#             processor.read_text("This is the third test... works properly?")
-#
-#         # Reading THINKING_SOUNDS (if available)
-#
-#             from varstore import THINKING_SOUNDS
-#             processor.read_text(" ".join(THINKING_SOUNDS))
-#         except ImportError:
-#             print("THINKING_SOUNDS variable could not be imported from varstore.")
-#
-#
-#     # Run the test playback in a separate thread
-#     threading.Thread(target=test_playback, daemon=True).start()
-#
-#     while True:
-#         pass
 
 if __name__ == "__main__":
     processor = SpeechProcessorTTSX()
@@ -257,15 +191,66 @@ if __name__ == "__main__":
         print("Finished reading the text.")
 
 
-    # First playback
+    def test_threads():
+        # Function to simulate concurrent reads/stops
+        print("Starting thread tests...")
+
+        # Store references to all threads for monitoring
+        threads = []
+
+        def play_and_stop(index, text, wait_time):
+            print(f"[Thread-{index}] Starting playback for message: {text}")
+            processor.stop_sound()
+            processor.read_text(text, before_text, after_text)
+            time.sleep(wait_time)  # Let it play for some duration
+            processor.stop_sound()
+            print(f"[Thread-{index}] Stopped playback.")
+
+        # Simulate multiple threads calling `read_text` and stopping playback
+        for i in range(5):  # Test with 5 threads
+            t = threading.Thread(target=play_and_stop, args=(i, f"Message from Thread-{i}", 2), daemon=True)
+            threads.append(t)
+            t.start()
+            time.sleep(0.5)  # Stagger thread startups for overlapping processing
+
+        # Wait for all threads to complete
+        for t in threads:
+            t.join()
+
+        print("All threads completed without issues.")
+
+
+    def repeat_stop_test():
+        # Repeatedly play and stop to test robustness
+        print("\nStarting repeated play/stop test...")
+        try:
+            for i in range(10):  # Repeat 10 times
+                print(f"Iteration {i + 1}")
+                processor.read_text(f"Test message {i + 1}", before_text, after_text)
+                time.sleep(1)  # Let it play for a short duration
+                processor.stop_sound()  # Stop the playback
+                # Ensure no active threads after stopping
+                assert processor.playback_thread is None or not processor.playback_thread.is_alive(), \
+                    f"Playback thread not cleaned up properly in iteration {i + 1}"
+        except AssertionError as e:
+            print(f"Error detected: {e}, {traceback.format_exc()}")
+        else:
+            print("Repeated play/stop test passed successfully.")
+
+
+    # Run the basic playback and stop behavior
+    print("\n--- Basic Playback Test ---")
     processor.read_text("Hello, this is a test of the text-to-speech system.", before_text, after_text)
-
-    # Simulate waiting before stopping
-    import time
-
-    time.sleep(2.5)  # Let it play for a second
+    time.sleep(2.5)  # Let it play for a short duration
     processor.stop_sound()
 
-    # Immediate second playback
-    processor.read_text("This is the second message after stopping the first one.", before_text, after_text)
-    time.sleep(6)
+    print("\n--- Immediate Playback After Stop ---")
+    processor.read_text("This is a test to ensure smooth transition between messages.", before_text, after_text)
+    time.sleep(6)  # Allow playback to finish
+
+    # Run advanced tests
+    print("\n--- Thread and Resource Robustness Tests ---")
+    test_threads()
+    repeat_stop_test()
+
+    print("\n--- All Tests Completed ---")
