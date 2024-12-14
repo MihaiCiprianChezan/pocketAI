@@ -156,6 +156,28 @@ ACKNOWLEDGEMENTS = [
     "Sure!"
 ]
 
+LANGUAGES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ru": "Russian",
+    "pt": "Portuguese",
+    "ar": "Arabic",
+    "it": "Italian",
+    "ko": "Korean",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "vi": "Vietnamese",
+    "tr": "Turkish",
+    "pl": "Polish",
+    "nl": "Dutch",
+    "sv": "Swedish",
+    "cs": "Czech",
+    "he": "Hebrew"
+}
 
 # Glitches in voice recognizer got no clue how those are generated may be some glitches in the model
 GLITCHES = [
@@ -163,5 +185,6 @@ GLITCHES = [
     "1.5% 1.5% 1.5% 1.5% 1.5%"
     "I'm going to get the right"
     "I'm going to get you a little bit more"
+    "1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1"
 ]
 

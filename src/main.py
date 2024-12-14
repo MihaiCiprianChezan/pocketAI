@@ -13,7 +13,7 @@ from energy_ball import EnergyBall
 from speech_processor import SpeechProcessor
 from utils import is_recog_glitch, get_unique_choice, is_prompt_valid
 from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
-    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS
+    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES
 
 
 class VoiceApp(QObject):
@@ -47,11 +47,11 @@ class VoiceApp(QObject):
     def paste_at_cursor(self):
         """Paste copied text at the cursor."""
         text = pyperclip.paste()
-        keyboard.write(text)
+        keyboard.write(text, delay=0.05)
 
     def write_text(self, text):
         """Write the text dynamically with a slight delay."""
-        keyboard.write(text, delay=0.005)
+        keyboard.write(text, delay=0.05)
 
     def is_for_bot(self, spoken, clean, for_bot_attention=False):
         name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
@@ -99,6 +99,7 @@ class VoiceApp(QObject):
                 self.write_text(spoken)
         elif not self.handle_general_commands(tokens, self.chatting or is_for_bot):
             # If no general commands are recognized, handle fallback for general mode
+            # pass
             if (not self.chatbot_speaking) and (self.chatting or is_for_bot) and prompt_is_valid:
                 self.get_ai_response(spoken)
 
@@ -134,6 +135,11 @@ class VoiceApp(QObject):
             ("hold", "on"): self.handle_stop_command,
             ("read", "this"): lambda: self.read_selected_text(is_for_bot),
             ("explain", "this"): lambda: self.explain_selected_text(is_for_bot),
+            ("translate", "to", "english"): lambda: self.translate_selected_text(is_for_bot, 'en'),
+            ("translate", "to", "french"): lambda: self.translate_selected_text(is_for_bot, 'fr'),
+            ("translate", "to", "german"): lambda: self.translate_selected_text(is_for_bot, 'de'),
+            ("translate", "to", "spanish"): lambda: self.translate_selected_text(is_for_bot, 'es'),
+            ("translate", "to", "swedish"): lambda: self.translate_selected_text(is_for_bot, 'sv'),
             ("exit", "exit"): self.exit_app,
         }
 
@@ -152,29 +158,38 @@ class VoiceApp(QObject):
 
     def activate_write_mode(self):
         """Activate write mode."""
-        self.speech_processor.read_text("Edit Mode, write with words!", call_before=None, call_back=None)
-        self.ball_change_color(self.OPERATING_TEXT)
-        self.in_write_mode = True
+        if not self.in_write_mode:
+            self.speech_processor.read_text("Edit Mode was activated!", call_before=None, call_back=None)
+            self.ball_change_color(self.OPERATING_TEXT)
+            self.in_write_mode = True
+        else:
+            self.speech_processor.read_text("Edit mode is already active!", call_before=None, call_back=None)
 
     def deactivate_write_mode(self):
         """Deactivate write mode."""
-        self.speech_processor.read_text("Closing Edit mode...", call_before=None, call_back=None)
-        self.in_write_mode = False
+        if self.in_write_mode:
+            self.speech_processor.read_text("Closing Edit mode...", call_before=None, call_back=None)
+            self.in_write_mode = False
+        else:
+            self.speech_processor.read_text("Edit mode is not active!", call_before=None, call_back=None)
         self.ball_reset_colorized()
 
     def start_chat(self):
         """Start chat mode."""
+        self.speech_processor.read_text("Chat mode Activated!", call_before=None, call_back=None)
         self.chatting = True
         self.history = []
         print("Chat mode activated.")
 
     def pause_chat(self):
         """Pause chat mode."""
+        self.speech_processor.read_text("Chat mode Paused!", call_before=None, call_back=None)
         self.chatting = False
         print("Chat mode paused.")
 
     def stop_chat(self):
         """Stop chat mode."""
+        self.speech_processor.read_text("Closing Chat mode...", call_before=None, call_back=None)
         self.history = []
         self.chatting = False
         print("Chat mode deactivated.")
@@ -201,7 +216,7 @@ class VoiceApp(QObject):
             self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
             self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             keyboard.send("ctrl+c")  # Copy selected text
-            sleep(0.1)
+            sleep(0.3)
             text = pyperclip.paste()
             self.ball_change_color(self.OPERATING_TEXT)
             self.speak(text)
@@ -214,10 +229,27 @@ class VoiceApp(QObject):
             self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
             self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             keyboard.send("ctrl+c")
-            sleep(0.1)
+            sleep(0.3)
             copied_text = pyperclip.paste()
-            prompt = f"Please explain this: {copied_text}"
+            copied_text = copied_text.replace('\n', '').strip()
+            prompt = f"Please explain this: `{copied_text}`"
             self.get_ai_response(prompt)
+        else:
+            print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
+
+    def translate_selected_text(self, is_for_bot, lang="en"):
+        """Explain the selected text."""
+        if is_for_bot:
+            self.previous_expression = get_unique_choice(ACKNOWLEDGEMENTS, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+            keyboard.send("ctrl+c")
+            sleep(0.3)
+            copied_text = pyperclip.paste()
+            language = LANGUAGES[lang]
+            print(f" [Translation to {lang}:language] of: {copied_text}")
+            prompt = f"Detect the language of the text and translate it to {language} language, reply only the translation. Text to translate into {language} language: `{copied_text}`\n"
+            print(f" [Translation prompt]: {prompt}")
+            self.get_ai_response(prompt, lang=lang)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
@@ -237,9 +269,10 @@ class VoiceApp(QObject):
             self,
             spoken_prompt,
             colour=SPEAKING,
-            min_interval=3.0,  # Minimum interval in seconds
+            min_interval=2.0,  # Minimum interval in seconds
             max_interval=5.0,  # Maximum interval in seconds
-            entertain_messages=THINKING_SOUNDS  # List of random messages
+            entertain_messages=THINKING_SOUNDS,  # List of random messages
+            lang="en"
     ):
         """
         Will change the color of the ball, start pulsating on the rhythm of the text token responses from the model.
@@ -266,7 +299,7 @@ class VoiceApp(QObject):
 
         print(f"\n")
         self.ball_change_color(colour)
-        self.speak(response)
+        self.speak(response, lang=lang)
 
     # ------------------------- Helper Functions -------------------------
 
@@ -301,10 +334,10 @@ class VoiceApp(QObject):
 
     # --------------------- Energy ball related ----------------------------
 
-    def speak(self, speech_script):
+    def speak(self, speech_script, lang="en"):
         self.chatbot_speaking = True
         self.ball_start_pulsating()
-        self.speech_processor.read_text(speech_script, call_back=self.speak_callback)
+        self.speech_processor.read_text(speech_script, call_back=self.speak_callback, lang=lang)
 
     def speak_callback(self):
         self.speech_processor.stop_sound(call_back=None)
