@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 from better_profanity import profanity
 from chat_bot import ChatBot
 from energy_ball import EnergyBall
-from speech_processor import SpeechProcessor
+from speech_processor_ttsx import SpeechProcessorTTSX
 from utils import is_recog_glitch, get_unique_choice, is_prompt_valid
 from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
     GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES
@@ -28,7 +28,7 @@ class VoiceApp(QObject):
 
     def __init__(self):
         super().__init__()
-        self.speech_processor = SpeechProcessor()
+        self.speech_processor = SpeechProcessorTTSX()
         self.in_write_mode = False
         self.buffer_text = ""
         self.chatting = True

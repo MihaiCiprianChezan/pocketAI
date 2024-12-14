@@ -1,11 +1,11 @@
 import random
 import sys
-from time import sleep
 
 from PySide6.QtCore import QSize, QVariantAnimation, QTimer, QCoreApplication
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QMouseEvent, QAction
 from PySide6.QtGui import QMovie
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget, QMessageBox
 from PySide6.QtWidgets import QGraphicsColorizeEffect
 from PySide6.QtWidgets import QMenu
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QMenu
 class EnergyBall(QWidget):
     def __init__(self, gif_path="./images/opti100.gif"):
         super().__init__()
-
+        self.circle_color = QColor(0, 0, 0, 127)
         # Configure the transparent, frameless overlay window
         self.pulsating = None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -58,21 +58,21 @@ class EnergyBall(QWidget):
             QCoreApplication.quit()
 
     # Slot to handle color change
-    def change_color(self, command, params):
+    def change_color(self, command=None, params={}):
         color = params.get("color", (0, 0, 0))
         self.set_colorized(QColor(*color))
 
     # Slot to start pulsating
-    def start_pulsating(self, command, _params=None):
+    def start_pulsating(self, command=None, _params=None):
         self.pulsate_effect()
 
     # Slot to stop pulsating
-    def stop_pulsating(self, command, _params=None):
+    def stop_pulsating(self, command=None, _params=None):
         if getattr(self, "pulsating", False):
             self.pulsating = False
 
     # Slot to handle zoom effect
-    def zoom_effect_wrapper(self, command, params):
+    def zoom_effect_wrapper(self, command, params={}):
         zoom_factor = params.get("factor", 1.1)
         duration = params.get("duration", 100)
         self.zoom_effect(duration, zoom_factor)
@@ -312,18 +312,30 @@ class EnergyBall(QWidget):
             self.set_colorized(QColor(50, 50, 50))
         elif event.key() == Qt.Key_Space:  # Reset to initial uncolorized state
             self.label.setGraphicsEffect(None)  # Remove any color overlay
-        elif event.key() == Qt.Key_Escape:  # Exit
-            self.close()
         elif event.key() == Qt.Key_9:  # Toggle pulsating effect
             self.pulsate_effect()  # New pulsating effect toggle
             print("Pulsate toggle key detected!")  # Debugging output
         elif event.key() == Qt.Key_0:  # Zoom in and out
             self.zoom_effect()
             print("Zoom key detected!")  # Debug
+        elif event.key() == Qt.Key_Return:  # Zoom in and out
+            self.stop_pulsating()
+            print("stoping pulsating!")  # Debug
+        elif event.key() == Qt.Key_Escape:  # Exit
+            self.close()
+            QCoreApplication.quit()
 
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(self.circle_color)
+        painter.setPen(Qt.NoPen)
+        radius = max(self.width()-20, self.height()-20) // 2
+        painter.drawEllipse(self.rect().center(), radius, radius)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    energy_ball = FloatingEnergyBall()
+    energy_ball = EnergyBall()
     energy_ball.show()
     sys.exit(app.exec())

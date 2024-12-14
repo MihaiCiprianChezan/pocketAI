@@ -188,3 +188,12 @@ GLITCHES = [
     "1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1"
 ]
 
+VOICES = {
+    "Microsoft Aria (Natural)": {"language": "English (United States)"},
+    "Microsoft Ryan (Natural)": {"language": "English (United Kingdom)"},
+    "Microsoft Sonia (Natural)": {"language": "English (United Kingdom)"},
+    "Microsoft Dalia (Natural)": {"language": "Spanish (Mexico)"},
+    "Microsoft Denise (Natural)": {"language": "French (France)"},
+    "Microsoft Katja (Natural)": {"language": "German (Germany)"},
+    "Microsoft Xiaoxiao (Natural)": {"language": "Chinese (Simplified, China)"}
+}
