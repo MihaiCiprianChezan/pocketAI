@@ -1,15 +1,12 @@
-import io
+import json
 import threading
 import time
 import traceback
-import warnings
-import numpy as np
+import pyaudio
 import pyttsx3
 import speech_recognition as sr
 import torch
 import vosk
-import pyaudio
-import json
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
@@ -44,7 +41,6 @@ class SpeechProcessorTTSX:
         except Exception as e:
             print(f"Error initializing Vosk: {e}, {traceback.format_exc()}")
             self.model = None
-
         self.set_voice(self.DEFAULT_VOICE)  # Initialize voice after listing
         self.set_rate(self.DEFAULT_RATE)
 
@@ -84,17 +80,16 @@ class SpeechProcessorTTSX:
     def recognize_speech(self):
         if self.model:  # Use Vosk if initialized
             return self.recognize_speech_vosk()
-        else:  # Fallback to Whisper
-            return self.recognize_speech_whisper()
+        else:
+            raise Exception("Vosk not initialized, cannot recognize speech.")
 
     def recognize_speech_vosk(self):
+        """Recognize speech using Vosk."""
         try:
             audio_interface = pyaudio.PyAudio()
-            stream = audio_interface.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True,
-                                          frames_per_buffer=8000)
+            stream = audio_interface.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=8000)
             stream.start_stream()
-
-            print("Listening for speech (Vosk)...")
+            print("Listening for speech ...")
             while True:
                 data = stream.read(4000, exception_on_overflow=False)
                 if len(data) == 0:
@@ -103,7 +98,7 @@ class SpeechProcessorTTSX:
                     result = json.loads(self.recognizer_vosk.Result())
                     text = result.get("text", "").strip()
                     if text:
-                        print(f"Recognized: {text}")
+                        # print(f"Recognized: {text}")
                         return text
         except Exception as e:
             print(f"Vosk recognition error: {e}, {traceback.format_exc()}")
@@ -114,46 +109,53 @@ class SpeechProcessorTTSX:
                 stream.close()
             audio_interface.terminate()
 
-    def _fade_out(self, sound, duration_ms):
-        """Dummy method for compatibility."""
-        pass
-
     def read_text(self, text, call_before=None, call_back=None, lang="en"):
-        ###### The inner threaded read text function
+        """
+        Reads the given text aloud using a text-to-speech engine. Prior to reading, it ensures no other playback is currently
+        in progress. The method supports optional pre- and post-speech callback functionalities and allows specifying the
+        language for the voice used in text-to-speech.
+        """
         def _read_text_inner(text_to_read):
             try:
-                print("(i) _read_text_inner() Started reading ...")
-                if call_before:
-                    call_before()  # Pre-speech actions
-
+                # print("[DEBUG] (i) _read_text_inner() Started reading ...")
+                # Pre-speech actions
+                if call_before and callable(call_before):
+                    # print("[DEBUG] (i) _read_text_inner() calling call_before() ...")
+                    call_before()
+                # Speech
                 self.engine.say(text_to_read)
                 self.engine.startLoop(False)
                 while self.engine.isBusy() and not self.stop_playback_event.is_set():
                     self.engine.iterate()
+                    self.wait(100)
                 self.engine.endLoop()
                 self.stop_playback_event.clear()
-
-                if call_back:
-                    call_back()  # Post-speech actions
+                # Post-speech actions
+                if call_back and callable(call_back):
+                    # print("[DEBUG] (i) _read_text_inner() calling callback() ...")
+                    call_back()
 
             except Exception as e:
                 print(f"Error during text reading: {e}, {traceback.format_exc()}")
                 self.stop_playback_event.clear()  # Ensure it's cleared on error
 
-        ###### //// End of inner read text function
+        if lang:
+            pass
+            # TODO: set the appropriate voice for the appropriate language
+            # self.set_voice(lang + " - " + self.DEFAULT_VOICE)
 
         # Ensure no playback is ongoing before starting
         if self.playback_thread and self.playback_thread.is_alive():
-            print("<!> Playback already in progress, stopping current playback...")
+            # print("[DEBUG] <!> Playback already in progress, stopping current playback...")
             self.stop_sound()  # Signal the thread to stop
             if self.playback_thread:
                 self.playback_thread.join()  # Wait for the playback thread to finish
-            if self.playback_thread and self.playback_thread.is_alive():
-                self.wait(100)
-            print("<!> Previous playback stopped successfully.")
 
-        # Start a new playback thread
-        print("(i) Starting new playback...")
+        while self.playback_thread and self.playback_thread.is_alive():
+            self.wait(100)
+            print("[DEBUG] <!> Waiting for previous playback thread to finish ...")
+
+        print("[DEBUG] <!> Starting new playback thread ...")
         self.playback_thread = threading.Thread(target=_read_text_inner, args=(text,), daemon=True)
         self.stop_playback_event.clear()
         self.playback_thread.start()
@@ -165,13 +167,14 @@ class SpeechProcessorTTSX:
             self.playback_thread.join()  # Wait for the playback thread to finish
             self.playback_thread = None  # Reset the thread variable after joining
 
-        if call_back:
+        if call_back and callable(call_back):
+            print("[DEBUG] (i) stop_sound() calling callback() ...")
             call_back()
 
     def shutdown(self):
         with self.mixer_lock:  # Acquire the mixer lock (even though mixer use is removed)
             self.engine.stop()
-            print("TTS engine shut down.")
+            print("(i) TTS engine shut down.")
 
     @staticmethod
     def wait(duration_ms):

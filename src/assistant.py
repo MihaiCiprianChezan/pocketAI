@@ -79,7 +79,7 @@ class ChatAssistant:
         t.join()
         return response
 
-    def get_response(self, history, message, return_iter=True):
+    def get_response(self, history, message, return_iter=True, lang="en"):
         """
         Get the entire response at once
         response = self.get_response(history, "Hello!")
@@ -90,6 +90,10 @@ class ChatAssistant:
         for partial_response in response_stream:
         print(partial_response)  >  intermediate updates as they are generated
         """
+        if lang:
+            # TODO: handle multilanguage prompts ...
+            pass
+
         if not history:
             history = []
         history.append([message, ""])  # Append user message with empty reply

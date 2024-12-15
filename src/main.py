@@ -27,6 +27,7 @@ class VoiceApp(QObject):
     GENERATING = MAGENTA
     SPEAKING = BLUE
     OPERATING_TEXT = YELLOW
+    INITIAL = {"color": "initial"}
 
     def __init__(self):
         super().__init__()
@@ -38,7 +39,32 @@ class VoiceApp(QObject):
         self.assistant_speaking = False
         self.history = []
         self.previous_expression = None
-        self.speech_processor.read_text(random.choice(HELLOS), call_before=None, call_back=None)
+
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(1000)
+        self.speech_processor.stop_sound()
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(1000)
+        self.speech_processor.stop_sound()
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(100)
+        self.speech_processor.stop_sound()
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(1000)
+        self.speech_processor.stop_sound()
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(1000)
+        self.speech_processor.stop_sound()
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(1000)
+        self.speech_processor.stop_sound()
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(1000)
+        self.speech_processor.stop_sound()
+        self.speech_processor.wait(1000)
+
+
+
 
     def clean_text(self, text):
         """Clean the input text by removing non-alphanumeric characters."""
@@ -107,7 +133,7 @@ class VoiceApp(QObject):
         if self.assistant_speaking:
             print(f"<!> Assistant is currently speaking. Stopping current speech ...")
 
-        self.speech_processor.stop_sound()
+        # self.speech_processor.stop_sound()
         self.assistant_speaking = False
 
         if addresses_assistant:
@@ -131,8 +157,11 @@ class VoiceApp(QObject):
                 if response:
                     self.assistant_speaking = True
                     print(f"[Assistant final response]: {response}")
-                    self.speech_processor.read_text(response)
+                    # self.ball_start_pulsating()
+                    # self.speech_processor.read_text(response, call_before=self.speak_call_before(), call_back=self.speak_callback())
                     # self.speak(response)
+                    self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+
 
 
     def handle_write_mode_commands(self, tokens, spoken):
@@ -172,7 +201,7 @@ class VoiceApp(QObject):
             ("translate", "to", "german"): lambda: self.translate_selected_text(is_for_assistant, 'de'),
             ("translate", "to", "spanish"): lambda: self.translate_selected_text(is_for_assistant, 'es'),
             ("translate", "to", "swedish"): lambda: self.translate_selected_text(is_for_assistant, 'sv'),
-            ("exit", "exit"): self.exit_app,
+            ("exit", "app"): self.exit_app,
         }
 
         for command_tokens, action in commands.items():
@@ -233,7 +262,7 @@ class VoiceApp(QObject):
                 print("<!> Assistant is speaking! stopping ...")
                 print("(i) Saying a short confirmation ...")
                 self.assistant_speaking = False
-                self.speech_processor.stop_sound()
+                # self.speech_processor.stop_sound()
                 self.read_unique(SHORT_CONFIRMS)
                 self.speech_processor.read_text(
                     self.previous_expression,
@@ -289,101 +318,107 @@ class VoiceApp(QObject):
     def exit_app(self):
         """Exit the application gracefully."""
         try:
-            self.read_unique(GOODBYES)
             print("Exiting the program...")
+            self.read_unique(GOODBYES)
+            self.speech_processor.wait(2000)
             self.speech_processor.stop_sound(call_back=None)
             self.emit_exit()
             sys.exit(0)
         except Exception as e:
             print(f"Error exiting: {e}, {e.__traceback__}")
 
-    def read_unique(self, expression_list):
+    def read_unique(self, expression_list, speaking_color=None, after_color=None):
         self.previous_expression = get_unique_choice(expression_list, self.previous_expression)
-        self.speech_processor.read_text(self.previous_expression)
+        self.agent_speak(self.previous_expression, speaking_color=speaking_color, after_color=after_color)
 
-    def get_ai_response(
-            self,
-            spoken_prompt,
-            colour=GENERATING,
-            min_interval=2.0,  # Minimum interval in seconds
-            max_interval=5.0,  # Maximum interval in seconds
-            entertain=True,
-            lang="en"
-    ):
+    def get_ai_response(self, spoken_prompt, colour=GENERATING, entertain=True, lang="en"):
         """
         Will change the color of the ball, start pulsating on the rhythm of the text token responses from the model.
         Will also progressively print in the console the full response from the AI model.
         Once the response from the AI model is received, it will be spoken out loud.
         """
         print(f"[USER prompt]: {spoken_prompt}")
-
         self.ball_change_color(colour)
-        self.read_unique(ACKNOWLEDGEMENTS)
-        if entertain:
-             last_update_time, random_interval = self._initialize_time(2, 5)
-
+        self.read_unique(SHORT_CONFIRMS)
+        last_update_time, random_interval = self._initialize_time() if entertain else (None, None)
         response = ""
-        response_iter = self.chat_assistant.get_response(self.history, spoken_prompt)
-        # print(f"[AI response]:", end="")
+        response_iter = self.chat_assistant.get_response(self.history, spoken_prompt, lang=lang)
+        print(f"\n[DEBUG] [AI real time response] >", flush=True)
         for partial_response in response_iter:
-            response = self._update_response(response, partial_response)
+            response, diff = self._update_response(response, partial_response, zoom=True)
+            print(f"{diff}", end="", flush=True)
 
-        if entertain and self._should_entertain(last_update_time, random_interval):
-            last_update_time, random_interval = self._entertain_user(
-                WAITING_SOUNDS, min_interval, max_interval
-            )
+            if entertain and time.time() - last_update_time >= random_interval:
+                self.read_unique(WAITING_SOUNDS)
+                last_update_time, random_interval = self._initialize_time(1, 2)
 
-        # print(f"\n")
+        print(f"\n", flush=True)
+        self.ball_reset_colorized()
         return clean_response(response)
-        # self.ball_change_color(colour)
-        # self.speak(response, lang=lang)
 
     # ------------------------- Helper Functions -------------------------
 
-    def _initialize_time(self, min_interval, max_interval):
+    def _initialize_time(self, min_interval=2, max_interval=5):
         """Initialize and return the starting time and a random interval."""
         last_update_time = time.time()
         random_interval = random.uniform(min_interval, max_interval)
         return last_update_time, random_interval
 
-    def _update_response(self, response, partial_response):
+    def _update_response(self, response, partial_response, zoom=True):
         """Update the response with the latest partial data and print any new tokens."""
+        diff = ""
         if response != partial_response:
             diff = partial_response.replace(response, "")
             response += diff
-            if diff:
+            if diff and zoom:
                 self.ball_zoom_effect()
-                # print(f"{diff}", end="")
-        return response
+        return response, diff
 
-    def _should_entertain(self, last_update_time, random_interval):
-        """Check if it is time to entertain the user."""
-        return time.time() - last_update_time >= random_interval
-
-    def _entertain_user(self, entertain_messages, min_interval, max_interval):
-        """
-        Entertain the user with a random message and reinitialize time tracking.
-        Returns: tuple: Updated last_update_time and random_interval.
-        """
-        self.previous_expression = get_unique_choice(entertain_messages, self.previous_expression)
-        self.speech_processor.read_text(self.previous_expression)
-        return self._initialize_time(min_interval, max_interval)
+    # def _should_entertain(self, last_update_time, random_interval):
+    #     """Check if it is time to entertain the user."""
+    #     return time.time() - last_update_time >= random_interval
+    #
+    # def _entertain_user(self, entertain_messages, min_interval=2, max_interval=5):
+    #     """
+    #     Entertain the user with a random message and reinitialize time tracking.
+    #     Returns: tuple: Updated last_update_time and random_interval.
+    #     """
+    #     # self.previous_expression = get_unique_choice(entertain_messages, self.previous_expression)
+    #     # self.speech_processor.read_text(self.previous_expression)
+    #     self.read_unique(entertain_messages)
+    #     return self._initialize_time(min_interval, max_interval)
 
     # --------------------- Energy ball related ----------------------------
 
-    def speak(self, speech_script, lang="en"):
-        self.assistant_speaking = True
-        self.ball_start_pulsating()
-        self.speech_processor.stop_sound()
-        self.speech_processor.read_text(speech_script, call_back=self.speak_callback, lang=lang)
+    def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en"):
+        # self.speech_processor.stop_sound(call_back=self.speak_callback)
+        # self.speech_processor.wait(100)
+        self.speech_processor.read_text(
+            speech_script,
+            call_before=lambda:self.speak_call_before(color=speaking_color),
+            call_back=lambda:self.speak_callback(color=after_color),
+            lang=lang)
 
-    def speak_callback(self):
-        # self.speech_processor.stop_sound(call_back=None)
+    def speak_call_before(self, color=None):
+        # print("speak_call_before() ...")
+        if color:
+            self.ball_change_color(color)
+        self.ball_start_pulsating()
+        self.assistant_speaking = True
+
+    def speak_callback(self, color=None):
+        # print("speak_call_before() ...")
+        if color:
+            if color == self.INITIAL:
+                self.ball_reset_colorized()
+            else:
+                self.ball_change_color(color)
         self.ball_stop_pulsating()
         self.assistant_speaking = False
 
-    def make_silence(self):
-        self.speech_processor.stop_sound(call_back=self.ball_stop_pulsating)
+
+    # def make_silence(self):
+    #     self.speech_processor.stop_sound(call_back=self.ball_stop_pulsating)
 
     def ball_zoom_effect(self, zoom=FAST_ZOOM):
         self.send_command_to_ball.emit("zoom_effect", zoom)
@@ -392,10 +427,10 @@ class VoiceApp(QObject):
         self.send_command_to_ball.emit("change_color", color)
         sleep(0.3)
 
-    def ball_start_pulsating(self, color=SPEAKING):
-        self.ball_change_color(color)
-        sleep(0.3)
+    def ball_start_pulsating(self):
+        # self.send_command_to_ball.emit("change_color", color)
         self.send_command_to_ball.emit("start_pulsating", {})
+        sleep(0.3)
 
     def ball_reset_colorized(self):
         self.send_command_to_ball.emit("reset_colorized", {})
@@ -404,7 +439,6 @@ class VoiceApp(QObject):
         """Stop pulsating the ball."""
         self.send_command_to_ball.emit("stop_pulsating", {})
         sleep(0.3)
-        self.ball_reset_colorized()
 
     def emit_exit(self):
         """Stop pulsating the ball."""
