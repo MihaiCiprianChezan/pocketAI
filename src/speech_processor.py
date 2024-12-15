@@ -86,9 +86,9 @@ class SpeechProcessor:
             pygame.time.wait(step_delay)  # Wait for the next step
         sound.stop()  # Stop playback after the fade-out is complete
 
-    def read_text(self, text, call_before=None, call_back=None, lang="en"):
+    def read_text(self, text, call_before=None, call_back=None, lang="en", tld="co.uk"):
         try:
-            tts = gTTS(text=text, lang=lang)
+            tts = gTTS(text=text, lang=lang, tld=tld)
             audio_stream = io.BytesIO()
             tts.write_to_fp(audio_stream)
             audio_stream.seek(0)

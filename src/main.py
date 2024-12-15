@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 from better_profanity import profanity
 from assistant import ChatAssistant
 from energy_ball import EnergyBall
-from speech_processor_ttsx import SpeechProcessorTTSX
+from speech_processor_ttsx import SpeechProcessor
 from utils import is_recog_glitch, get_unique_choice, is_prompt_valid, clean_response
 from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
     GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES, WAITING_SOUNDS, \
@@ -31,7 +31,7 @@ class VoiceApp(QObject):
 
     def __init__(self):
         super().__init__()
-        self.speech_processor = SpeechProcessorTTSX()
+        self.speech_processor = SpeechProcessor()
         self.in_write_mode = False
         self.buffer_text = ""
         self.chatting = True
@@ -39,32 +39,7 @@ class VoiceApp(QObject):
         self.assistant_speaking = False
         self.history = []
         self.previous_expression = None
-
         self.read_unique(HELLOS)
-        self.speech_processor.wait(1000)
-        self.speech_processor.stop_sound()
-        self.read_unique(HELLOS)
-        self.speech_processor.wait(1000)
-        self.speech_processor.stop_sound()
-        self.read_unique(HELLOS)
-        self.speech_processor.wait(100)
-        self.speech_processor.stop_sound()
-        self.read_unique(HELLOS)
-        self.speech_processor.wait(1000)
-        self.speech_processor.stop_sound()
-        self.read_unique(HELLOS)
-        self.speech_processor.wait(1000)
-        self.speech_processor.stop_sound()
-        self.read_unique(HELLOS)
-        self.speech_processor.wait(1000)
-        self.speech_processor.stop_sound()
-        self.read_unique(HELLOS)
-        self.speech_processor.wait(1000)
-        self.speech_processor.stop_sound()
-        self.speech_processor.wait(1000)
-
-
-
 
     def clean_text(self, text):
         """Clean the input text by removing non-alphanumeric characters."""
@@ -160,7 +135,8 @@ class VoiceApp(QObject):
                     # self.ball_start_pulsating()
                     # self.speech_processor.read_text(response, call_before=self.speak_call_before(), call_back=self.speak_callback())
                     # self.speak(response)
-                    self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+                    self.agent_speak(response, speaking_color=None, after_color=None)
+                    # self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
 
 
@@ -330,6 +306,7 @@ class VoiceApp(QObject):
     def read_unique(self, expression_list, speaking_color=None, after_color=None):
         self.previous_expression = get_unique_choice(expression_list, self.previous_expression)
         self.agent_speak(self.previous_expression, speaking_color=speaking_color, after_color=after_color)
+        # self.speech_processor.wait(1000)
 
     def get_ai_response(self, spoken_prompt, colour=GENERATING, entertain=True, lang="en"):
         """
@@ -393,11 +370,18 @@ class VoiceApp(QObject):
     def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en"):
         # self.speech_processor.stop_sound(call_back=self.speak_callback)
         # self.speech_processor.wait(100)
+        print("[DEBUG] Starting agent_speak")
+        print(f"[DEBUG] Script: {speech_script}, Color: {speaking_color}")
+        self.speech_processor.stop_sound()
         self.speech_processor.read_text(
             speech_script,
-            call_before=lambda:self.speak_call_before(color=speaking_color),
-            call_back=lambda:self.speak_callback(color=after_color),
+            call_before=None,
+            call_back=None,
+            # call_before=lambda:self.speak_call_before(color=speaking_color),
+            # call_back=lambda:self.speak_callback(color=after_color),
             lang=lang)
+        # self.speech_processor.wait(1000)
+
 
     def speak_call_before(self, color=None):
         # print("speak_call_before() ...")
