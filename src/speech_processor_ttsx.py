@@ -124,6 +124,7 @@ class SpeechProcessor:
                         call_before()
                     # Speech
                     self.set_voice(self.current_voice)
+                    self.engine.save_to_file(text, "self.mp3")
                     self.engine.say(text_to_read)
                     self.engine.startLoop(False)
                     while self.engine.isBusy() and not self.stop_playback_event.is_set():

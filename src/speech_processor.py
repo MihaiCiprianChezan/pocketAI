@@ -7,7 +7,7 @@ import speech_recognition as sr
 import torch
 import whisper
 from gtts import gTTS
-
+import pyttsx3
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", message="Some parameters are on the meta device because they were offloaded to the cpu.")
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -149,9 +149,74 @@ class SpeechProcessor:
     def wait(duration_ms):
         pygame.time.wait(duration_ms)
 
+class SpeechProcessorTTSX3(SpeechProcessor):
+    DEFAULT_VOICE = "Microsoft Sonia (Natural) - English (United Kingdom)"  # Or your preferred default
+    DEFAULT_RATE = 180
+
+    def __init__(self):
+        super().__init__()
+        self.engine = pyttsx3.init('sapi5')
+        self.current_voice = self.DEFAULT_VOICE
+        self.rate = self.DEFAULT_RATE
+        self.mixer_lock = threading.Lock()
+        self.stop_playback_event = threading.Event()
+        self.audio_output_file = "output_audio.mp3"
+        self.voices = self._list_voices()
+        self.set_voice(self.DEFAULT_VOICE)
+        self.set_rate(self.DEFAULT_RATE)
+
+
+    def read_text(self, text, call_before=None, call_back=None, lang="en",  tld="co.uk"):
+        try:
+            if call_before:
+                print("read_text() Calling before function...")
+                call_before()
+            with self.mixer_lock:
+                self.engine.save_to_file(text, self.audio_output_file)
+                self.engine.runAndWait()
+            with open(self.audio_output_file, "rb") as file:
+                audio_data = file.read()
+            self.play_stream(audio_data, call_back=call_back)
+        except Exception as e:
+            print(f"Error generating text-to-speech audio with pyttsx3: {e}")
+
+    # def stop_sound(self, call_back=None):
+    #     with self.mixer_lock:
+    #         print(f"Stopping audio playback using pyttsx3...")
+    #         self.stop_playback_event.set()
+    #     if call_back:
+    #         call_back()
+
+    def set_voice(self, voice_name):
+        if voice_name in self.voices:
+            self.engine.setProperty('voice', self.voices[voice_name]['id'])
+            self.current_voice = voice_name
+            print(f"Voice set to: {voice_name}")
+        else:
+            print(f"Voice '{voice_name}' not found.")
+
+    def set_rate(self, rate):
+        self.engine.setProperty('rate', rate)
+        self.rate = rate
+        print(f"Rate set to: {rate}")
+
+    def _list_voices(self):
+        """Fetch available voices."""
+        voices = self.engine.getProperty('voices')
+        voice_dict = {}
+        for voice in voices:
+            voice_dict[voice.name] = {"id": voice.id, "gender": voice.gender, "languages": voice.languages}
+        return voice_dict
+
+    def shutdown(self):
+        """Cleanly shut down pyttsx3 engine."""
+        with self.mixer_lock:
+            self.engine.stop()
+            print("pyttsx3 engine shut down.")
+
 # Usage
 if __name__ == "__main__":
-    processor = SpeechProcessor()
+    processor = SpeechProcessorTTSX3()
 
     def test_playback():
         print("Testing playback...")
