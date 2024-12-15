@@ -5,11 +5,11 @@ NON_ALPHANUMERIC_REGEX = re.compile(r'[^a-zA-Z0-9\s]')
 MULTIPLE_SPACES_REGEX = re.compile(r'\s+')
 
 # Colorize colors for ball effects
-RED = {"color": (100, 0, 0)}
-BLUE = {"color": (0, 20, 120)}
+RED = {"color": (89, 0, 0)}
+BLUE = {"color": (0, 23, 112)}
 GREEN = {"color": (0, 100, 0)}
-YELLOW = {"color": (80, 80, 0)}
-MAGENTA = {"color": (80, 0, 80)}
+YELLOW = {"color": (65, 60, 0)}
+MAGENTA = {"color": (60, 0, 60)}
 GREY = {"color": (50, 50, 50)}
 ORANGE = {"color": (100, 50, 0)}
 BROWN = {"color": (60, 30, 10)}
@@ -28,17 +28,25 @@ FAST_ZOOM = {"factor": 0.95, "duration": 100}
 
 # Bot utility words and expressions
 SHORT_CONFIRMS = [
-    'hmm...',
-    'ooh...',
-    'ahh..',
-    'uhh..',
-    'aha...',
-    'sure...',
-    'oh...',
-    'ok...',
-    'yup...',
-    'yes...',
-    'right...'
+    'imh!',
+    'ooh!',
+    'ahh!',
+    'uhh!',
+    'aha!',
+    'sure!',
+    'yup!',
+    'yes!',
+    'right!',
+    'ok!',
+    'yeah!',
+    'got it!',
+    'roger!',
+    'fine!',
+    'done!',
+    'okay!',
+    'absolutely!',
+    'definitely!',
+    'for sure!'
 ]
 
 HELLOS = [
@@ -52,7 +60,20 @@ HELLOS = [
     "Salutations!",
     "Hiya!",
     "Hey dear!",
-    "Yo!"
+    "Yo!",
+    "Hola!",
+    "Bonjour!",
+    "Heya!",
+    "Hi!",
+    "Greetings and salutations!",
+    "Good to see you!",
+    "Howdy-do!",
+    "Hey friend!",
+    "Hi friend!",
+    "Nice to meet you!",
+    "Top of the morning!",
+    "Peace!",
+    "Salute!"
 ]
 
 GOODBYES = [
@@ -131,7 +152,24 @@ WAITING_SOUNDS = [
     "Working on it...",
     "In progress...",
     "Give me a moment...",
-    "Coming right up..."
+    "Coming right up...",
+    "Almost done...",
+    "Bear with me...",
+    "Wait a moment...",
+    "Hold tight...",
+    "Patience, please...",
+    "Finalizing...",
+    "One sec...",
+    "Right away...",
+    "Let me check...",
+    "Just a minute...",
+    "Hang on...",
+    "Crunching numbers...",
+    "Hold the line...",
+    "Loading...",
+    "Just a few seconds...",
+    "Stay tuned...",
+    "Nearly there..."
 ]
 
 POLITE_RESPONSES = [

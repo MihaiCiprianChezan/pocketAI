@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QMenu
 class EnergyBall(QWidget):
     def __init__(self, gif_path="./images/opti100.gif"):
         super().__init__()
-        self.circle_color = QColor(0, 0, 0, 127)
+        self.circle_color = QColor(0, 0, 0, 80)
         # Configure the transparent, frameless overlay window
         self.pulsating = None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)

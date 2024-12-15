@@ -1,20 +1,18 @@
-import random
 import sys
 import threading
 import time
 import traceback
 from time import sleep
-import keyboard
-import pyperclip
+
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 from better_profanity import profanity
 from assistant import ChatAssistant
 from energy_ball import EnergyBall
-from speech_processor import SpeechProcessor, SpeechProcessorTTSX3
-from utils import is_recog_glitch, get_unique_choice, is_prompt_valid, clean_response
-from varstore import NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX, BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
-    GOODBYES, HELLOS, THINKING_SOUNDS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES, WAITING_SOUNDS, \
+from speech_processor import SpeechProcessorTTSX3
+from utils import *
+from varstore import BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
+    GOODBYES, HELLOS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES, WAITING_SOUNDS, \
     UNCLEAR_PROMPT_RESPONSES
 
 
@@ -39,28 +37,12 @@ class VoiceApp(QObject):
         self.assistant_speaking = False
         self.history = []
         self.previous_expression = None
-        self.read_unique(HELLOS)
-
-    def clean_text(self, text):
-        """Clean the input text by removing non-alphanumeric characters."""
-        alphanumeric_text = NON_ALPHANUMERIC_REGEX.sub('', text)
-        single_spaced_text = MULTIPLE_SPACES_REGEX.sub(' ', alphanumeric_text)
-        return single_spaced_text.strip().lower()
-
-    def paste_at_cursor(self):
-        """Paste copied text at the cursor."""
-        text = pyperclip.paste()
-        keyboard.write(text, delay=0.05)
-
-    def write_text(self, text):
-        """Write the text dynamically with a slight delay."""
-        keyboard.write(text, delay=0.05)
 
     def is_for_assistant(self, spoken, clean, for_bot_attention=False):
         name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
         is_addressed = any(variant in clean or variant in spoken.lower() for variant in name_variants)
         if is_addressed:
-            clean = self.clean_text(clean.replace(self.NAME.lower(), "").strip())
+            clean = clean_text(clean.replace(self.NAME.lower(), "").strip())
             for variant in name_variants:
                 spoken = spoken.replace(variant, "").strip()
             for_bot_attention = True
@@ -108,9 +90,6 @@ class VoiceApp(QObject):
         if self.assistant_speaking:
             print(f"<!> Assistant is currently speaking. Stopping current speech ...")
 
-        # self.speech_processor.stop_sound()
-        self.assistant_speaking = False
-
         if addresses_assistant:
             print(f"(i) Prompt is addressed to the Assistant (mentions Assistant name).")
 
@@ -119,8 +98,7 @@ class VoiceApp(QObject):
             if self.handle_write_mode_commands(tokens, spoken):
                 return
             # writing spoken text
-            self.write_text(spoken)
-                
+            write_text(spoken)
         else:
             # general commands
             if self.handle_general_commands(tokens, self.chatting or addresses_assistant):
@@ -132,19 +110,13 @@ class VoiceApp(QObject):
                 if response:
                     self.assistant_speaking = True
                     print(f"[Assistant final response]: {response}")
-                    # self.ball_start_pulsating()
-                    # self.speech_processor.read_text(response, call_before=self.speak_call_before(), call_back=self.speak_callback())
-                    # self.speak(response)
-                    self.agent_speak(response, speaking_color=None, after_color=None)
-                    # self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
-
-
+                    self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def handle_write_mode_commands(self, tokens, spoken):
         """Handle commands in write mode and return True if a command was handled."""
         commands = {
             ("new", "line"): lambda: self.write_text("\n"),
-            ("paste", "paste"): self.paste_at_cursor,
+            ("paste", "paste"): paste_at_cursor,
             ("select", "all"): lambda: keyboard.send("ctrl+a"),
             ("select", "word"): lambda: keyboard.send("ctrl+shift+left"),
             ("copy", "copy"): lambda: keyboard.send("ctrl+c"),
@@ -240,11 +212,6 @@ class VoiceApp(QObject):
                 self.assistant_speaking = False
                 # self.speech_processor.stop_sound()
                 self.read_unique(SHORT_CONFIRMS)
-                self.speech_processor.read_text(
-                    self.previous_expression,
-                    call_before=None,
-                    call_back=self.ball_stop_pulsating
-                )
                 print("(i) Reading text interrupted ...")
             except Exception as e:
                 print(f"Error stopping: {e}, {traceback.format_exc()}")
@@ -259,7 +226,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             text = pyperclip.paste()
             self.ball_change_color(self.OPERATING_TEXT)
-            self.speak(text)
+            self.agent_speak(text, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call Assistant by name.")
 
@@ -272,7 +239,8 @@ class VoiceApp(QObject):
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
             prompt = f"Please explain this: `{copied_text}`"
-            self.speak(self.get_ai_response(prompt, lang=lang), lang=lang)
+            ai_response = self.get_ai_response(prompt, lang=lang)
+            self.agent_speak(ai_response, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL)
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
@@ -287,7 +255,9 @@ class VoiceApp(QObject):
             print(f" [Translation to {lang}:language] of: {copied_text}")
             prompt = f"Detect the language of the text and translate it to {language} language, reply only the translation. Text to translate into {language} language: `{copied_text}`\n"
             print(f" [Translation prompt]: {prompt}")
-            self.speak(self.get_ai_response(prompt, lang=lang), lang=lang)
+            ai_response = self.get_ai_response(prompt, lang=lang)
+            self.agent_speak(ai_response, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL, lang=lang)
+
         else:
             print("(i) Not in chat mode. Please activate chat mode or call bot by name.")
 
@@ -306,7 +276,6 @@ class VoiceApp(QObject):
     def read_unique(self, expression_list, speaking_color=None, after_color=None):
         self.previous_expression = get_unique_choice(expression_list, self.previous_expression)
         self.agent_speak(self.previous_expression, speaking_color=speaking_color, after_color=after_color)
-        # self.speech_processor.wait(1000)
 
     def get_ai_response(self, spoken_prompt, colour=GENERATING, entertain=True, lang="en"):
         """
@@ -321,21 +290,24 @@ class VoiceApp(QObject):
         response = ""
         response_iter = self.chat_assistant.get_response(self.history, spoken_prompt, lang=lang)
         print(f"\n[DEBUG] [AI real time response] >", flush=True)
+        # partial prompt results
         for partial_response in response_iter:
-            response, diff = self._update_response(response, partial_response, zoom=True)
+            response, diff = self._update_response(response, partial_response.replace("\n", ""), zoom=True)
             print(f"{diff}", end="", flush=True)
-
+            # entertain periodically
             if entertain and time.time() - last_update_time >= random_interval:
-                self.read_unique(WAITING_SOUNDS)
-                last_update_time, random_interval = self._initialize_time(1, 2)
-
+                last_update_time, random_interval = self.entertain(last_update_time, random_interval)
         print(f"\n", flush=True)
         self.ball_reset_colorized()
         return clean_response(response)
 
-    # ------------------------- Helper Functions -------------------------
+    def entertain(self, min_interval=2, max_interval=5):
+        self.read_unique(WAITING_SOUNDS)
+        last_update_time, random_interval = self._initialize_time(min_interval, max_interval)
+        return last_update_time, random_interval
 
-    def _initialize_time(self, min_interval=2, max_interval=5):
+    @staticmethod
+    def _initialize_time(min_interval=2, max_interval=5):
         """Initialize and return the starting time and a random interval."""
         last_update_time = time.time()
         random_interval = random.uniform(min_interval, max_interval)
@@ -351,47 +323,25 @@ class VoiceApp(QObject):
                 self.ball_zoom_effect()
         return response, diff
 
-    # def _should_entertain(self, last_update_time, random_interval):
-    #     """Check if it is time to entertain the user."""
-    #     return time.time() - last_update_time >= random_interval
-    #
-    # def _entertain_user(self, entertain_messages, min_interval=2, max_interval=5):
-    #     """
-    #     Entertain the user with a random message and reinitialize time tracking.
-    #     Returns: tuple: Updated last_update_time and random_interval.
-    #     """
-    #     # self.previous_expression = get_unique_choice(entertain_messages, self.previous_expression)
-    #     # self.speech_processor.read_text(self.previous_expression)
-    #     self.read_unique(entertain_messages)
-    #     return self._initialize_time(min_interval, max_interval)
-
     # --------------------- Energy ball related ----------------------------
 
     def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en"):
-        # self.speech_processor.stop_sound(call_back=self.speak_callback)
-        # self.speech_processor.wait(100)
         print("[DEBUG] Starting agent_speak")
         print(f"[DEBUG] Script: {speech_script}, Color: {speaking_color}")
         self.speech_processor.stop_sound()
         self.speech_processor.read_text(
             speech_script,
-            call_before=None,
-            call_back=None,
-            # call_before=lambda:self.speak_call_before(color=speaking_color),
-            # call_back=lambda:self.speak_callback(color=after_color),
+            call_before=lambda: self.speak_call_before(color=speaking_color),
+            call_back=lambda: self.speak_callback(color=after_color),
             lang=lang)
-        # self.speech_processor.wait(1000)
-
 
     def speak_call_before(self, color=None):
-        # print("speak_call_before() ...")
         if color:
             self.ball_change_color(color)
         self.ball_start_pulsating()
         self.assistant_speaking = True
 
     def speak_callback(self, color=None):
-        # print("speak_call_before() ...")
         if color:
             if color == self.INITIAL:
                 self.ball_reset_colorized()
@@ -399,7 +349,6 @@ class VoiceApp(QObject):
                 self.ball_change_color(color)
         self.ball_stop_pulsating()
         self.assistant_speaking = False
-
 
     # def make_silence(self):
     #     self.speech_processor.stop_sound(call_back=self.ball_stop_pulsating)
@@ -430,6 +379,8 @@ class VoiceApp(QObject):
 
     def run(self):
         """Run the main loop to listen for and process voice commands."""
+        self.read_unique(HELLOS)
+        self.speech_processor.wait(2000)
         while True:
             spoken = self.speech_processor.recognize_speech()
             if is_recog_glitch(spoken):
@@ -437,7 +388,7 @@ class VoiceApp(QObject):
                 spoken = ""
             if spoken:
                 print(f"Recognized speech: {spoken}")
-                cleaned = self.clean_text(spoken)
+                cleaned = clean_text(spoken)
                 self.process_command(spoken, cleaned)
             else:
                 print("No speech recognized ...")

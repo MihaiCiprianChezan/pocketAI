@@ -1,6 +1,11 @@
 import random
 import re
-from varstore import GLITCHES
+
+import keyboard
+import pyperclip
+
+from varstore import GLITCHES, NON_ALPHANUMERIC_REGEX, MULTIPLE_SPACES_REGEX
+
 
 def is_recog_glitch(spoken, glitches=GLITCHES):
     for g in glitches:
@@ -90,5 +95,21 @@ def clean_response(llm_response):
 
     # Strip leading and trailing whitespaces
     cleaned_text = cleaned_text.strip()
-
     return cleaned_text
+
+def clean_text(text):
+    """Clean the input text by removing non-alphanumeric characters."""
+    alphanumeric_text = NON_ALPHANUMERIC_REGEX.sub('', text)
+    single_spaced_text = MULTIPLE_SPACES_REGEX.sub(' ', alphanumeric_text)
+    return single_spaced_text.strip().lower()
+
+def paste_at_cursor():
+    """Paste copied text at the cursor."""
+    text = pyperclip.paste()
+    keyboard.write(text, delay=0.05)
+
+def write_text(text):
+    """Write the text dynamically with a slight delay."""
+    keyboard.write(text, delay=0.05)
+
+
