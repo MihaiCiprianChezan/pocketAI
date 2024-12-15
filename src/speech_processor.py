@@ -1,6 +1,7 @@
 import io
 import json
 import threading
+import traceback
 import warnings
 import numpy as np
 import pyaudio
@@ -39,7 +40,7 @@ class SpeechProcessor:
                 self.recognizer_vosk = vosk.KaldiRecognizer(self.model_vosk, 16000)
                 print("Vosk model initialized successfully.")
             except Exception as e:
-                print(f"Error initializing Vosk: {e}")
+                print(f"Error initializing Vosk: {e}, {traceback.format_exc()}")
                 self.model_vosk = None
         else:
             # Whisper initialization
@@ -54,7 +55,7 @@ class SpeechProcessor:
                     print("Pygame mixer initialized successfully.")
                     print(f"Audio device: {pygame.mixer.get_init()}")
                 except pygame.error as e:
-                    print(f"Error initializing Pygame mixer: {e}")  # Log any mixer error
+                    print(f"Error initializing Pygame mixer: {e}, {traceback.format_exc()}")  # Log any mixer error
                     return False
             return True
 
@@ -86,7 +87,7 @@ class SpeechProcessor:
             result = self.model_whisper.transcribe(audio_data)
             return result["text"].strip()
         except Exception as e:
-            print(f"Error recognizing speech with Whisper: {e}")
+            print(f"Error recognizing speech with Whisper: {e}, {traceback.format_exc()}")
             return ""
 
     def _recognize_speech_vosk(self):
@@ -107,7 +108,7 @@ class SpeechProcessor:
                     if text:
                         return text
         except Exception as e:
-            print(f"Error recognizing speech with Vosk: {e}")
+            print(f"Error recognizing speech with Vosk: {e}, {traceback.format_exc()}")
             return ""
         finally:
             if stream:
@@ -138,11 +139,11 @@ class SpeechProcessor:
             tts.write_to_fp(audio_stream)
             audio_stream.seek(0)
             if call_before:
-                print("read_text() Calling before function...")
+                # print("read_text() Calling before function...")
                 call_before()
             self.play_stream(audio_stream.read(), call_back=call_back)
         except Exception as e:
-            print(f"Error generating text-to-speech audio: {e}")
+            print(f"Error generating text-to-speech audio: {e}, {traceback.format_exc()}")
 
     def play_stream(self, audio_stream, call_back=None, fade_out_duration_ms=FADEOUT_DURATION_MS):
         def playback_worker(stream):
@@ -160,12 +161,12 @@ class SpeechProcessor:
                         break
                     pygame.time.wait(100)  # Wait before re-checking if sound is playing
             except Exception as e:
-                print(f"Error during audio playback: {e}")
+                print(f"Error during audio playback: {e}, {traceback.format_exc()}")
             finally:
                 pygame.mixer.quit()  # Cleanup the mixer
                 self.stop_playback_event.clear()
-            if call_back:
-                print("play_stream() Calling after function...")
+            if call_back and callable(call_back):
+                # print("play_stream() Calling after function...")
                 call_back()
 
         self.playback_thread = threading.Thread(target=playback_worker, args=(audio_stream,), daemon=True)
@@ -180,7 +181,7 @@ class SpeechProcessor:
             self.stop_playback_event.set()
             # Make sure we wait a bit longer than the fade
             pygame.time.wait(self.FADEOUT_DURATION_MS + 100)
-        if call_back:
+        if call_back and callable(call_back):
             call_back()
 
     def shutdown(self):
@@ -198,6 +199,13 @@ class SpeechProcessor:
 class SpeechProcessorTTSX3(SpeechProcessor):
     DEFAULT_VOICE = "Microsoft Sonia (Natural) - English (United Kingdom)"  # Or your preferred default
     DEFAULT_RATE = 180
+    SUPPORTED_LANGUAGES = {
+        "en": "Microsoft Sonia (Natural) - English (United Kingdom)",
+        "es": "Microsoft Dalia (Natural) - Spanish (Mexico)",
+        "fr": "Microsoft Denise (Natural) - French (France)",
+        "de": "Microsoft Katja (Natural) - German (Germany)",
+        "zh": "Microsoft Xiaoxiao (Natural) - Chinese (Simplified, China)"
+    }
 
     def __init__(self):
         super().__init__()
@@ -213,24 +221,23 @@ class SpeechProcessorTTSX3(SpeechProcessor):
 
     def read_text(self, text, call_before=None, call_back=None, lang="en", tld="co.uk"):
         try:
-            if call_before:
-                print("read_text() Calling before function...")
+            if call_before and callable(call_before):
+                # print("read_text() Calling before function...")
                 call_before()
             with self.mixer_lock:
+                if lang in self.SUPPORTED_LANGUAGES.keys():
+                    if self.SUPPORTED_LANGUAGES[lang] != self.current_voice:
+                        self.set_voice(self.SUPPORTED_LANGUAGES[lang])
                 self.engine.save_to_file(text, self.audio_output_file)
                 self.engine.runAndWait()
+                if lang in self.SUPPORTED_LANGUAGES.keys():
+                    if self.SUPPORTED_LANGUAGES[lang] != self.current_voice:
+                        self.set_voice(self.current_voice)
             with open(self.audio_output_file, "rb") as file:
                 audio_data = file.read()
             self.play_stream(audio_data, call_back=call_back)
         except Exception as e:
-            print(f"Error generating text-to-speech audio with pyttsx3: {e}")
-
-    # def stop_sound(self, call_back=None):
-    #     with self.mixer_lock:
-    #         print(f"Stopping audio playback using pyttsx3...")
-    #         self.stop_playback_event.set()
-    #     if call_back:
-    #         call_back()
+            print(f"Error generating text-to-speech audio with pyttsx3: {e}, {traceback.format_exc()}")
 
     def set_voice(self, voice_name):
         if voice_name in self.voices:
@@ -286,7 +293,9 @@ if __name__ == "__main__":
         processor.read_text(" ".join(THINKING_SOUNDS))
 
 
-    threading.Thread(target=test_playback, daemon=True).start()
+    # threading.Thread(target=test_playback, daemon=True).start()
+
+    print(processor._list_voices())
 
     while True:
         pass

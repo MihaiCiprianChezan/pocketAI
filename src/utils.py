@@ -99,8 +99,8 @@ def clean_response(llm_response):
 
 def clean_text(text):
     """Clean the input text by removing non-alphanumeric characters."""
-    alphanumeric_text = NON_ALPHANUMERIC_REGEX.sub('', text)
-    single_spaced_text = MULTIPLE_SPACES_REGEX.sub(' ', alphanumeric_text)
+    # alphanumeric_text = NON_ALPHANUMERIC_REGEX.sub('', text)
+    single_spaced_text = MULTIPLE_SPACES_REGEX.sub(' ', text)
     return single_spaced_text.strip().lower()
 
 def paste_at_cursor():

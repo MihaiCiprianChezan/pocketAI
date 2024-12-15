@@ -67,18 +67,18 @@ class VoiceApp(QObject):
         """Process voice commands and handle them using helper methods."""
         # check if prompt makes sense
 
-        prompt_is_valid = is_prompt_valid(spoken, clean)
-        if not prompt_is_valid:
-            print(f"<!> Prompt is not valid: {spoken}")
-            self.previous_expression = get_unique_choice(UNCLEAR_PROMPT_RESPONSES, self.previous_expression)
-            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
-            return
-
         # check if prompt is a profanity/vulgarity
         prompt_is_profanity = profanity.contains_profanity(spoken)
         if prompt_is_profanity:
             print(f"<!> Profanity detected: {profanity.censor(spoken)}")
             self.previous_expression = get_unique_choice(POLITE_RESPONSES, self.previous_expression)
+            self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
+            return
+
+        prompt_is_valid = is_prompt_valid(spoken, clean)
+        if not prompt_is_valid:
+            print(f"<!> Prompt is not valid: {spoken}")
+            self.previous_expression = get_unique_choice(UNCLEAR_PROMPT_RESPONSES, self.previous_expression)
             self.speech_processor.read_text(self.previous_expression, call_before=None, call_back=None)
             return
 
@@ -148,7 +148,12 @@ class VoiceApp(QObject):
             ("translate", "to", "french"): lambda: self.translate_selected_text(is_for_assistant, 'fr'),
             ("translate", "to", "german"): lambda: self.translate_selected_text(is_for_assistant, 'de'),
             ("translate", "to", "spanish"): lambda: self.translate_selected_text(is_for_assistant, 'es'),
-            ("translate", "to", "swedish"): lambda: self.translate_selected_text(is_for_assistant, 'sv'),
+            ("translate", "to", "chinese"): lambda: self.translate_selected_text(is_for_assistant, 'zh'),
+            ("translate", "into", "english"): lambda: self.translate_selected_text(is_for_assistant, 'en'),
+            ("translate", "into", "french"): lambda: self.translate_selected_text(is_for_assistant, 'fr'),
+            ("translate", "into", "german"): lambda: self.translate_selected_text(is_for_assistant, 'de'),
+            ("translate", "into", "spanish"): lambda: self.translate_selected_text(is_for_assistant, 'es'),
+            ("translate", "into", "chinese"): lambda: self.translate_selected_text(is_for_assistant, 'zh'),
             ("exit", "app"): self.exit_app,
         }
 
@@ -299,7 +304,9 @@ class VoiceApp(QObject):
                 last_update_time, random_interval = self.entertain(last_update_time, random_interval)
         print(f"\n", flush=True)
         self.ball_reset_colorized()
-        return clean_response(response)
+        clean_response = clean_text(response)
+        print(f"[AI final cleaned response]: {clean_response}")
+        return clean_response
 
     def entertain(self, min_interval=2, max_interval=5):
         self.read_unique(WAITING_SOUNDS)
