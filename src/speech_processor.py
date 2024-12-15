@@ -1,23 +1,21 @@
 import io
+import json
 import threading
 import warnings
 import numpy as np
+import pyaudio
 import pygame
+import pyttsx3
 import speech_recognition as sr
 import torch
+import vosk
 import whisper
 from gtts import gTTS
-import pyttsx3
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", message="Some parameters are on the meta device because they were offloaded to the cpu.")
 warnings.filterwarnings("ignore", category=FutureWarning)
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
-
-# Initialize the Whisper model
-model = whisper.load_model("base", device=device)
-model = model.to(device)
 
 class SpeechProcessor:
     # Constants
@@ -26,16 +24,26 @@ class SpeechProcessor:
     WAIT_DURATION_MS = 2000
     FADEOUT_STEPS = 10
 
-    def __init__(self):
+    def __init__(self, use_vosk=True):
         self.recognizer = sr.Recognizer()
         self.microphone = sr.Microphone(sample_rate=self.SAMPLE_RATE)
         self.stop_playback_event = threading.Event()
-        self.playback_thread = None
-        self.fadeout_thread = None
         self.mixer_lock = threading.Lock()
-        # Initialize Pygame mixer
+        self.use_vosk = use_vosk
         self._initialize_mixer()
-
+        if self.use_vosk:
+            # Vosk initialization
+            self.recognition_model_path = "../models/vosk-model-small-en-us-0.15"
+            try:
+                self.model_vosk = vosk.Model(self.recognition_model_path)
+                self.recognizer_vosk = vosk.KaldiRecognizer(self.model_vosk, 16000)
+                print("Vosk model initialized successfully.")
+            except Exception as e:
+                print(f"Error initializing Vosk: {e}")
+                self.model_vosk = None
+        else:
+            # Whisper initialization
+            self.model_whisper = whisper.load_model("base", device=device).to(device)
 
     def _initialize_mixer(self):
         """Ensure the Pygame mixer is initialized."""
@@ -57,18 +65,55 @@ class SpeechProcessor:
                 return False
             return pygame.mixer.music.get_busy()
 
-    def recognize_speech(self):
+    def recognize_speech(self, use_vosk=True):
+        """Recognize speech from the microphone using Whisper or Vosk."""
+        if use_vosk or self.use_vosk:
+            if not self.model_vosk:
+                print("Vosk model is not initialized. Falling back to Whisper.")
+                return self._recognize_speech_whisper()
+            return self._recognize_speech_vosk()
+        else:
+            return self._recognize_speech_whisper()
+
+    def _recognize_speech_whisper(self):
+        """Recognize speech using Whisper."""
         try:
             with self.microphone as source:
-                print("Listening...")
+                print("Listening with Whisper...")
                 audio = self.recognizer.listen(source)
-            print("Processing audio...")
+            print("Processing audio with Whisper...")
             audio_data = np.frombuffer(audio.get_raw_data(), dtype=np.int16).astype(np.float32) / 32768.0
-            result = model.transcribe(audio_data)
+            result = self.model_whisper.transcribe(audio_data)
             return result["text"].strip()
         except Exception as e:
-            print(f"Error recognizing speech: {e}")
+            print(f"Error recognizing speech with Whisper: {e}")
             return ""
+
+    def _recognize_speech_vosk(self):
+        """Recognize speech using Vosk."""
+        try:
+            audio_interface = pyaudio.PyAudio()
+            stream = audio_interface.open(
+                format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=8000)
+            stream.start_stream()
+            print("Listening with Vosk...")
+            while True:
+                data = stream.read(4000, exception_on_overflow=False)
+                if len(data) == 0:
+                    break
+                if self.recognizer_vosk.AcceptWaveform(data):
+                    result = json.loads(self.recognizer_vosk.Result())
+                    text = result.get("text", "").strip()
+                    if text:
+                        return text
+        except Exception as e:
+            print(f"Error recognizing speech with Vosk: {e}")
+            return ""
+        finally:
+            if stream:
+                stream.stop_stream()
+                stream.close()
+            audio_interface.terminate()
 
     def _fade_out(self, sound, duration_ms):
         """Manually fade out the audio by decreasing volume gradually over duration."""
@@ -149,6 +194,7 @@ class SpeechProcessor:
     def wait(duration_ms):
         pygame.time.wait(duration_ms)
 
+
 class SpeechProcessorTTSX3(SpeechProcessor):
     DEFAULT_VOICE = "Microsoft Sonia (Natural) - English (United Kingdom)"  # Or your preferred default
     DEFAULT_RATE = 180
@@ -165,8 +211,7 @@ class SpeechProcessorTTSX3(SpeechProcessor):
         self.set_voice(self.DEFAULT_VOICE)
         self.set_rate(self.DEFAULT_RATE)
 
-
-    def read_text(self, text, call_before=None, call_back=None, lang="en",  tld="co.uk"):
+    def read_text(self, text, call_before=None, call_back=None, lang="en", tld="co.uk"):
         try:
             if call_before:
                 print("read_text() Calling before function...")
@@ -214,9 +259,11 @@ class SpeechProcessorTTSX3(SpeechProcessor):
             self.engine.stop()
             print("pyttsx3 engine shut down.")
 
+
 # Usage
 if __name__ == "__main__":
     processor = SpeechProcessorTTSX3()
+
 
     def test_playback():
         print("Testing playback...")
