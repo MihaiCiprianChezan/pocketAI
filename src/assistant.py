@@ -16,12 +16,12 @@ class ChatAssistant:
         # Load model and tokenizer
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        print("Loading model to device: ", self.device)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            device_map=device_map,  # Distribute across available GPUs
-            torch_dtype=torch.float16 , # Use FP16 for faster inference
-        ).to(self.device)
-
+            device_map=device_map,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32).to(self.device)
+        print("Optimizing model for inference...")
         self.model = torch.compile(self.model, mode="max-autotune")
 
         # Pre-warm the model to initialize CUDA kernels
@@ -45,7 +45,7 @@ class ChatAssistant:
             "content": {
                 "You are Opti, a friendly AI assistant. "
                 "Provide concise, natural responses. "
-                "Summarize your responses in less than 256 characters when possible. "
+                "Limit your responses in less than 256 characters when possible. "
                 "Use a warm, engaging, live chat tone. "
                 "Respond in continuous paragraphs, avoid lists and tables, avoid markup or formatting."
                 "Do not salute or greet the user (consider salutations have already been done before)."
@@ -55,7 +55,7 @@ class ChatAssistant:
         return messages
 
     # def predict(self, history, max_length=100, top_p=0.9, temperature=0.8):
-    def predict(self, history, max_length=250, top_p=0.8, temperature=0.7):
+    def predict(self, history, max_length=150, top_p=0.8, temperature=0.7):
         messages = self.preprocess_messages(history)
 
         # Tokenize inputs

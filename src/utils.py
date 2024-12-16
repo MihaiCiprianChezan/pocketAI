@@ -54,28 +54,24 @@ def get_unique_choice(options, last_choice=None):
     last_choice = new_choice
     return new_choice
 
-def clean_response(llm_response):
+import re
+
+
+import re
+
+
+def clean_response(llm_response, ensure_punctuation=True):
     """
-    Cleans a response from an LLM model by:
-    - Removing newlines
-    - Stripping emojis
-    - Removing leading/trailing whitespaces
-    - Optionally performing further text sanitizations
-
-    Parameters:
-    - llm_response (str): The response text from the LLM.
-
-    Returns:
-    - str: The cleaned response.
+    Cleans an LLM response for live chat.
+    Args:
+        llm_response: The LLM-generated text.
+        ensure_punctuation: If True, removes the last incomplete sentence.
     """
     if not isinstance(llm_response, str):
-        raise ValueError("Input must be a string")
-
-    # Remove newlines and replace with a single space
-    cleaned_text = llm_response.replace('\n', ' ')
-
-    # Strip emojis using a regex pattern
-    emoji_pattern = re.compile(
+        return ""
+    # Combine regex for efficiency
+    combined_pattern = re.compile(
+        r"\*\*|"  # Remove double asterisks
         "["
         "\U0001F600-\U0001F64F"  # Emoticons
         "\U0001F300-\U0001F5FF"  # Symbols & Pictographs
@@ -88,14 +84,25 @@ def clean_response(llm_response):
         "\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
         "\U00002702-\U000027B0"  # Dingbats
         "\U000024C2-\U0001F251"  # Enclosed Characters
-        "]+",
+        "]+"
+        r"|\s+",
         flags=re.UNICODE,
     )
-    cleaned_text = emoji_pattern.sub('', cleaned_text)
-
-    # Strip leading and trailing whitespaces
+    cleaned_text = combined_pattern.sub(' ', llm_response)
+    cleaned_text = cleaned_text.replace('\n', ' ')
+    cut_part = None
+    if ensure_punctuation and "." in cleaned_text:
+        if not cleaned_text.endswith((".", "!", "?")):
+            last_punctuation = max(cleaned_text.rfind("."), cleaned_text.rfind("!"), cleaned_text.rfind("?"))
+            if last_punctuation != -1:
+                cut_part = cleaned_text[last_punctuation + 1:].strip()  # Store cut part here.
+                cleaned_text = cleaned_text[:last_punctuation + 1].strip()
     cleaned_text = cleaned_text.strip()
+    if cut_part:
+        print(f"<!> Cleaned out incomplete part: {cut_part}")
     return cleaned_text
+
+
 
 def clean_text(text):
     """Clean the input text by removing non-alphanumeric characters."""
@@ -106,10 +113,10 @@ def clean_text(text):
 def paste_at_cursor():
     """Paste copied text at the cursor."""
     text = pyperclip.paste()
-    keyboard.write(text, delay=0.05)
+    keyboard.send(text)
 
 def write_text(text):
     """Write the text dynamically with a slight delay."""
-    keyboard.write(text, delay=0.05)
+    keyboard.write(text)
 
 

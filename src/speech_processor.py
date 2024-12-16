@@ -12,6 +12,8 @@ import torch
 import vosk
 import whisper
 from gtts import gTTS
+from fastpunct import FastPunct
+
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", message="Some parameters are on the meta device because they were offloaded to the cpu.")
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -31,6 +33,7 @@ class SpeechProcessor:
         self.stop_playback_event = threading.Event()
         self.mixer_lock = threading.Lock()
         self.use_vosk = use_vosk
+        self.fastpunct = FastPunct()
         self._initialize_mixer()
         if self.use_vosk:
             # Vosk initialization
@@ -89,6 +92,17 @@ class SpeechProcessor:
         except Exception as e:
             print(f"Error recognizing speech with Whisper: {e}, {traceback.format_exc()}")
             return ""
+
+    def restore_punctuation(self, text):
+        """
+        Adds punctuation and capitalization to the transcribed text using fastPunct.
+        """
+        try:
+            punctuated_text = self.fastpunct.punct(text, correct=True)  # correct=True enables capitalization
+            return punctuated_text
+        except Exception as e:
+            print(f"Error while restoring punctuation: {e}")
+            return text
 
     def _recognize_speech_vosk(self):
         """Recognize speech using Vosk."""

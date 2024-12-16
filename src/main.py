@@ -3,7 +3,6 @@ import threading
 import time
 import traceback
 from time import sleep
-
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 from better_profanity import profanity
@@ -37,12 +36,13 @@ class VoiceApp(QObject):
         self.assistant_speaking = False
         self.history = []
         self.previous_expression = None
+        self.saluted = False
 
     def is_for_assistant(self, spoken, clean, for_bot_attention=False):
         name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
         is_addressed = any(variant in clean or variant in spoken.lower() for variant in name_variants)
         if is_addressed:
-            clean = clean_text(clean.replace(self.NAME.lower(), "").strip())
+            clean = clean.replace(self.NAME.lower(), "").strip()
             for variant in name_variants:
                 spoken = spoken.replace(variant, "").strip()
             for_bot_attention = True
@@ -93,20 +93,20 @@ class VoiceApp(QObject):
         if addresses_assistant:
             print(f"(i) Prompt is addressed to the Assistant (mentions Assistant name) ...")
 
-        # write-mode
+        # >>> write-mode =======================================================================
         if self.in_write_mode:
             if self.handle_write_mode_commands(tokens, spoken):
                 return
             # writing spoken text
-            write_text(spoken)
+            write_text(self.speech_processor.restore_punctuation(spoken))
         else:
-            # general commands
+            # >>> general commands =============================================================
             if self.handle_general_commands(tokens, self.chatting or addresses_assistant):
                 return
 
-            # chatting with the assistant
+            # >>> chatting with the assistant ==================================================
             if self.chatting or addresses_assistant:
-                response = self.get_ai_response(spoken)
+                response = self.get_ai_response(self.speech_processor.restore_punctuation(spoken))
                 if response:
                     self.assistant_speaking = True
                     print(f"[Assistant final response]: {response}")
@@ -115,7 +115,7 @@ class VoiceApp(QObject):
     def handle_write_mode_commands(self, tokens, spoken):
         """Handle commands in write mode and return True if a command was handled."""
         commands = {
-            ("new", "line"): lambda: self.write_text("\n"),
+            ("new", "line"): lambda: keyboard.write("\n"),
             ("paste", "paste"): paste_at_cursor,
             ("select", "all"): lambda: keyboard.send("ctrl+a"),
             ("select", "word"): lambda: keyboard.send("ctrl+shift+left"),
@@ -304,9 +304,9 @@ class VoiceApp(QObject):
                 last_update_time, random_interval = self.entertain(last_update_time, random_interval)
         print(f"\n", flush=True)
         self.ball_reset_colorized()
-        clean_response = clean_text(response)
-        print(f"[AI final cleaned response]: {clean_response}")
-        return clean_response
+        ai_response = clean_response(response)
+        print(f"[AI final cleaned response]: {ai_response}")
+        return ai_response
 
     def entertain(self, min_interval=2, max_interval=5):
         self.read_unique(WAITING_SOUNDS)
@@ -395,7 +395,7 @@ class VoiceApp(QObject):
                 spoken = ""
             if spoken:
                 print(f"Recognized speech: {spoken}")
-                cleaned = clean_text(spoken)
+                cleaned = spoken
                 self.process_command(spoken, cleaned)
             else:
                 print("No speech recognized ...")
