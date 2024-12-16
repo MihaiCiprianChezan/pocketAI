@@ -4,6 +4,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 from accelerate import infer_auto_device_map
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from torch.quantization import quantize_dynamic
 
 class ChatAssistant:
     def __init__(self, model_name="THUDM/glm-edge-1.5b-chat", device_map="auto"):
@@ -20,6 +21,8 @@ class ChatAssistant:
             device_map=device_map,  # Distribute across available GPUs
             torch_dtype=torch.float16 , # Use FP16 for faster inference
         ).to(self.device)
+
+        self.model = torch.compile(self.model, mode="max-autotune")
 
         # Pre-warm the model to initialize CUDA kernels
         dummy_input = self.tokenizer("Warm-up round!", return_tensors="pt").to(self.device)
@@ -39,14 +42,14 @@ class ChatAssistant:
 
         messages.append({
             "role": "system",
-            "content": (
+            "content": {
                 "You are Opti, a friendly AI assistant. "
                 "Provide concise, natural responses. "
-                "Summarize responses in 256 characters or less when possible. "
+                "Summarize your responses in less than 256 characters when possible. "
                 "Use a warm, engaging, live chat tone. "
-                "Respond in continuous paragraphs, avoid lists."
+                "Respond in continuous paragraphs, avoid lists and tables, avoid markup or formatting."
                 "Do not salute or greet the user (consider salutations have already been done before)."
-            )
+            }
         })
 
         return messages
