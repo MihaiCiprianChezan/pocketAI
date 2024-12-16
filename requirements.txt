@@ -2,8 +2,8 @@
 pyperclip>=1.8.0
 keyboard>=0.13.0
 speechrecognition>=3.8.1
-pyttsx3
-pyaudio
+pyttsx3~=2.98
+pyaudio~=0.2.14
 sounddevice
 numpy>=1.21.0
 pandas>=1.3.0
@@ -12,7 +12,7 @@ PySide6>=6.0.0
 gTTS>=2.3.0
 
 # Whisper and HuggingFace integration
-openai-whisper
+openai-whisper~=20240930
 whisper>=0.1.4
 transformers>=4.27.0
 git+https://github.com/huggingface/transformers.git
@@ -29,3 +29,7 @@ torch==2.0.1+cu121 --index-url https://download.pytorch.org/whl/cu121
 torchvision==0.15.2+cu121 --index-url https://download.pytorch.org/whl/cu121
 torchaudio==2.0.2+cu121 --index-url https://download.pytorch.org/whl/cu121
 better_profanity==0.7.0
+better-profanity~=0.7.0
+torch~=2.5.1+cu121
+vosk~=0.3.45
+torch

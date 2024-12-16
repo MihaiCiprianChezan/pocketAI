@@ -91,7 +91,7 @@ class VoiceApp(QObject):
             print(f"<!> Assistant is currently speaking. Stopping current speech ...")
 
         if addresses_assistant:
-            print(f"(i) Prompt is addressed to the Assistant (mentions Assistant name).")
+            print(f"(i) Prompt is addressed to the Assistant (mentions Assistant name) ...")
 
         # write-mode
         if self.in_write_mode:

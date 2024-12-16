@@ -1,14 +1,29 @@
 from threading import Thread, Lock
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
+from accelerate import infer_auto_device_map
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 class ChatAssistant:
     def __init__(self, model_name="THUDM/glm-edge-1.5b-chat", device_map="auto"):
         # Initialize lock
         self.history_lock = Lock()
+
+        # device_map = infer_auto_device_map(self.model, max_memory={0: "12GB", 1: "12GB"})
+
         # Load model and tokenizer
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            device_map=device_map,  # Distribute across available GPUs
+            torch_dtype=torch.float16 , # Use FP16 for faster inference
+        ).to(self.device)
+
+        # Pre-warm the model to initialize CUDA kernels
+        dummy_input = self.tokenizer("Warm-up round!", return_tensors="pt").to(self.device)
+        self.model.generate(**dummy_input)
 
     @staticmethod
     def preprocess_messages(history):
@@ -36,13 +51,14 @@ class ChatAssistant:
 
         return messages
 
-    def predict(self, history, max_length=100, top_p=0.9, temperature=0.8):
+    # def predict(self, history, max_length=100, top_p=0.9, temperature=0.8):
+    def predict(self, history, max_length=250, top_p=0.8, temperature=0.7):
         messages = self.preprocess_messages(history)
 
         # Tokenize inputs
         model_inputs = self.tokenizer.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", return_dict=True
-        ).to(self.model.device)
+        ).to(self.device)
 
         streamer = TextIteratorStreamer(self.tokenizer, timeout=60, skip_prompt=True, skip_special_tokens=True)
 
