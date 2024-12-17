@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
+
 class SpeechProcessor:
     # Constants
     FADEOUT_DURATION_MS = 500
@@ -155,7 +156,7 @@ class SpeechProcessor:
             tts.write_to_fp(audio_stream)
             audio_stream.seek(0)
             if call_before:
-                # print("read_text() Calling before function...")
+                print("[SOUND_PROCESSOR] : read_text.call_before() ...")
                 call_before()
             self.play_stream(audio_stream.read(), call_back=call_back)
         except Exception as e:
@@ -199,6 +200,7 @@ class SpeechProcessor:
 
                 # Execute callback after playback ends
                 if call_back and callable(call_back):
+                    print("[SOUND_PROCESSOR] play_stream.call_back() ...")
                     call_back()
 
         # If `do_not_interrupt` is False, stop any currently playing sound
@@ -228,6 +230,7 @@ class SpeechProcessor:
             # Make sure we wait a bit longer than the fade
             pygame.time.wait(self.FADEOUT_DURATION_MS + 100)
         if call_back and callable(call_back):
+            print("[SOUND_PROCESSOR] : stop_sound.call_back() ...")
             call_back()
 
     def shutdown(self):
@@ -269,6 +272,7 @@ class SpeechProcessorTTSX3(SpeechProcessor):
         try:
             if call_before and callable(call_before):
                 # print("read_text() Calling before function...")
+                print("[SOUND_PROCESSOR] : read_text.call_before() ...")
                 call_before()
             with self.mixer_lock:
                 if lang in self.SUPPORTED_LANGUAGES.keys():
@@ -318,14 +322,15 @@ if __name__ == "__main__":
     processor = SpeechProcessorTTSX3()
     from varstore import THINKING_SOUNDS, HELLOS
 
-    def test_playback():
 
+    def test_playback():
 
         print("Testing playback...")
         for helo in HELLOS:
             processor.read_text(helo)
         # processor.read_text(". ".join(HELLOS))
         # processor.read_text(" ".join(THINKING_SOUNDS))
+
 
     # threading.Thread(target=test_playback, daemon=True).start()
     print("Testing playback...")

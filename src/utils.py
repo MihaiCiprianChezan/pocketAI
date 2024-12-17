@@ -11,7 +11,7 @@ def is_recog_glitch(spoken, glitches=GLITCHES):
             return True
     return False
 
-def is_prompt_valid(spoken, clean, min_tokens=2, min_chars=5, min_unique_tokens=1, vulgarities_list=None):
+def is_prompt_valid(spoken, clean, min_tokens=3, min_chars=10, min_unique_tokens=3, vulgarities_list=None):
     if not clean.strip():
         return False
     token_count = len(clean.split())
