@@ -13,7 +13,7 @@ MAGENTA = {"color": (60, 0, 60)}
 GREY = {"color": (50, 50, 50)}
 ORANGE = {"color": (100, 50, 0)}
 BROWN = {"color": (60, 30, 10)}
-PINK = {"color": (100, 50, 60)}
+PINK = {"color": (70, 20, 30)}
 CYAN = {"color": (0, 80, 80)}
 LIME = {"color": (50, 100, 0)}
 PURPLE = {"color": (50, 0, 100)}
@@ -58,22 +58,31 @@ HELLOS = [
     "What's up?",
     "Good day!",
     "Salutations!",
-    "Hiya!",
-    "Hey dear!",
-    "Yo!",
-    "Hola!",
-    "Bonjour!",
-    "Heya!",
-    "Hi!",
-    "Greetings and salutations!",
-    "Good to see you!",
+    "Hello there!",
     "Howdy-do!",
     "Hey friend!",
-    "Hi friend!",
+    "Good to see you!",
+    "Hi buddy!",
     "Nice to meet you!",
     "Top of the morning!",
-    "Peace!",
-    "Salute!"
+    "Wassup!",
+    "Hey hey!",
+    "Hiya!",
+    "Hi folks!",
+    "Hi everyone!",
+    "Welcome!",
+    "Heya!",
+    "Howdy partner!",
+    "Long time no see!",
+    "What's crackin'?",
+    "Ahoy matey!",
+    "Hi, sunshine!",
+    "Hey champ!",
+    "Look who it is!",
+    "Hey, hey rockstar!",
+    "How's it going?",
+    "What's cookin'?",
+    "Hi there, stranger!",
 ]
 
 GOODBYES = [
@@ -83,11 +92,27 @@ GOODBYES = [
     "Bye!",
     "Later!",
     "Cheers!",
-    "Adios!",
-    "Ciao!",
     "Until next time!",
     "Peace out!",
-    "Farewell!"
+    "Farewell!",
+    "Bye-bye!",
+    "Catch you on the flip side!",
+    "See you later!",
+    "Toodles!",
+    "Don't be a stranger!",
+    "See you soon!",
+    "Stay awesome!",
+    "Laters!",
+    "I'm out!",
+    "Keep in touch!",
+    "Hasta la vista, baby!",
+    "Take it easy!",
+    "So long!",
+    "See you around!",
+    "Take it easy!",
+    "Stay safe!",
+    "Bye for now!",
+    "Over and out!",
 ]
 
 THINKING_SOUNDS = [
@@ -102,11 +127,14 @@ THINKING_SOUNDS = [
     "Alright...",
     "Wait...",
     "Hmm, okay...",
+    "Let me think...",
     "Curious...",
+    "Seems intriguing...",
     "Got it...",
     "Okay...",
     "Alrighty...",
     "Looking...",
+    "Whoa there..."
     "Huh...",
     "Sure...",
     "Well...",
@@ -118,6 +146,7 @@ THINKING_SOUNDS = [
     "Uh-huh...",
     "Yup...",
     "Ah...",
+    "Gotcha...",
     "Yeah...",
     "Righty...",
     "Yep-yep...",
@@ -141,11 +170,11 @@ WAITING_SOUNDS = [
     "Calculating...",
     "Just a bit longer...",
     "Stay with me...",
-    "Preparing your answer...",
+    "Preparing info...",
     "Almost there...",
     "Don't go anywhere...",
     "Hold on...",
-    "Fetching information...",
+    "Fetching info...",
     "Gathering data...",
     "Let me see...",
     "Processing...",
@@ -169,7 +198,16 @@ WAITING_SOUNDS = [
     "Loading...",
     "Just a few seconds...",
     "Stay tuned...",
-    "Nearly there..."
+    "Nearly there...",
+    "Let me do the magic...",
+    "Brewing the answer...",
+    "Cooking up...",
+    "Uploading thoughts...",
+    "On it, boss!",
+    "Almost cooked!",
+    "We're almost there...",
+    "It's on the way!",
+    "You're gonna like this..."
 ]
 
 POLITE_RESPONSES = [
@@ -188,11 +226,20 @@ POLITE_RESPONSES = [
     "Let's use kind words.",
     "There's no need for that language.",
     "Keep it polite, please.",
-    "Let's stay respectful.",
-    "Let's keep it civil.",
-    "Let's keep it clean.",
     "Respectful language goes a long way.",
-    "We can communicate better with respectful language."
+    "Words are powerful—let’s use them kindly.",
+    "I hear you, but we can express ourselves without profanities.",
+    "Yikes! Let’s stay cool and talk it out politely.",
+    "Oof! That’s intense. Let’s keep it chill.",
+    "Whoa, that's some spicy vocabulary—let’s keep it mild!",
+    "Please, let’s use our indoor voices—metaphorically speaking.",
+    "Time-out for those words. Let’s keep it clean.",
+    "I respect your input, but let's keep this civil and professional.",
+    "Our conversation can be more productive without offensive language.",
+    "Profanities detected; rebooting polite mode!",
+    "Let’s take a deep breath and keep it friendly.",
+    "Let’s save the dramatic words for a screenplay!",
+    "Mutual respect will ensure a better conversation."
 ]
 
 ACKNOWLEDGEMENTS = [
@@ -214,7 +261,57 @@ ACKNOWLEDGEMENTS = [
     "Okay then!",
     "Great!",
     "Perfect!",
-    "Sure!"
+    "Sure!",
+    "Cool, gotcha!",
+    "You bet!",
+    "All set!",
+    "Yup, on it!",
+    "Alrighty!",
+    "Certainly!",
+    "No problem!",
+    "Consider it done!",
+    "Happy to help!",
+    "Copy that!",
+    "Confirmed!",
+    "On it like a bot!",
+    "Acknowledged, captain!",
+    "Done and done!",
+    "Of course!",
+    "Got this!",
+    "Right on it!",
+    "Checked and ready!",
+    "I'll handle this for you.",
+    "You can count on me!",
+    "That works for me!"
+]
+
+UNCLEAR_PROMPT_RESPONSES = [
+    "What?",
+    "Huh?",
+    "Pardon?",
+    "Sorry?",
+    "Come again?",
+    "Explain?",
+    "Repeat?",
+    "Clarify?",
+    "Say again?",
+    "Meaning?",
+    "Details?",
+    "Sorry, what?",
+    "Eh?",
+    "What now?",
+    "Can you?",
+    "Repeat that?",
+    "More info?",
+    "Missed that.",
+    "How so?",
+    "Once more?",
+    "Again?",
+    "Missed it?",
+    "More?",
+    "How?",
+    "Why?",
+    "Info?"
 ]
 
 LANGUAGES = {
@@ -258,26 +355,3 @@ VOICES = {
     "Microsoft Katja (Natural)": {"language": "German (Germany)"},
     "Microsoft Xiaoxiao (Natural)": {"language": "Chinese (Simplified, China)"}
 }
-
-UNCLEAR_PROMPT_RESPONSES = [
-    "What?",
-    "Huh?",
-    "Pardon?",
-    "Sorry?",
-    "Come again?",
-    "Explain?",
-    "Repeat?",
-    "Clarify?",
-    "Say again?",
-    "Meaning?",
-    "Details?",
-    "Sorry, what?",
-    "Eh?",
-    "What now?",
-    "Can you?",
-    "Repeat that?",
-    "More info?",
-    "Missed that.",
-    "How so?",
-    "Once more?"
-]

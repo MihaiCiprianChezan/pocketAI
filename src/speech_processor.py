@@ -24,7 +24,7 @@ class SpeechProcessor:
     # Constants
     FADEOUT_DURATION_MS = 500
     SAMPLE_RATE = 16000
-    WAIT_DURATION_MS = 2000
+    # WAIT_DURATION_MS = 2000
     FADEOUT_STEPS = 10
 
     def __init__(self, use_vosk=True):
@@ -34,6 +34,7 @@ class SpeechProcessor:
         self.mixer_lock = threading.Lock()
         self.use_vosk = use_vosk
         self.fastpunct = FastPunct()
+        self.playback_thread = None
         self._initialize_mixer()
         if self.use_vosk:
             # Vosk initialization
@@ -41,9 +42,9 @@ class SpeechProcessor:
             try:
                 self.model_vosk = vosk.Model(self.recognition_model_path)
                 self.recognizer_vosk = vosk.KaldiRecognizer(self.model_vosk, 16000)
-                print("Vosk model initialized successfully.")
+                print("[SOUND_PROCESSOR] Vosk model initialized successfully.")
             except Exception as e:
-                print(f"Error initializing Vosk: {e}, {traceback.format_exc()}")
+                print(f"[SOUND_PROCESSOR] Error initializing Vosk: {e}, {traceback.format_exc()}")
                 self.model_vosk = None
         else:
             # Whisper initialization
@@ -55,17 +56,17 @@ class SpeechProcessor:
             if not pygame.mixer.get_init():
                 try:
                     pygame.mixer.init()  # Initialize mixer
-                    print("Pygame mixer initialized successfully.")
-                    print(f"Audio device: {pygame.mixer.get_init()}")
+                    print("[SOUND_PROCESSOR] Pygame mixer initialized successfully.")
+                    print(f"[SOUND_PROCESSOR] Audio device: {pygame.mixer.get_init()}")
                 except pygame.error as e:
-                    print(f"Error initializing Pygame mixer: {e}, {traceback.format_exc()}")  # Log any mixer error
+                    print(f"[SOUND_PROCESSOR] Error initializing Pygame mixer: {e}, {traceback.format_exc()}")  # Log any mixer error
                     return False
             return True
 
     def is_playing(self):
         with self.mixer_lock:
             if not pygame.mixer.get_init():
-                print("Mixer not initialized — cannot check if audio is playing.")
+                print("[SOUND_PROCESSOR] Mixer not initialized — cannot check if audio is playing.")
                 return False
             return pygame.mixer.music.get_busy()
 
@@ -73,7 +74,7 @@ class SpeechProcessor:
         """Recognize speech from the microphone using Whisper or Vosk."""
         if use_vosk or self.use_vosk:
             if not self.model_vosk:
-                print("Vosk model is not initialized. Falling back to Whisper.")
+                print("[SOUND_PROCESSOR] osk model is not initialized. Falling back to Whisper.")
                 return self._recognize_speech_whisper()
             return self._recognize_speech_vosk()
         else:
@@ -83,14 +84,14 @@ class SpeechProcessor:
         """Recognize speech using Whisper."""
         try:
             with self.microphone as source:
-                print("Listening with Whisper...")
+                print("[SOUND_PROCESSOR] Listening with Whisper...")
                 audio = self.recognizer.listen(source)
-            print("Processing audio with Whisper...")
+            print("[SOUND_PROCESSOR] Processing audio with Whisper...")
             audio_data = np.frombuffer(audio.get_raw_data(), dtype=np.int16).astype(np.float32) / 32768.0
             result = self.model_whisper.transcribe(audio_data)
             return result["text"].strip()
         except Exception as e:
-            print(f"Error recognizing speech with Whisper: {e}, {traceback.format_exc()}")
+            print(f"[SOUND_PROCESSOR] Error recognizing speech with Whisper: {e}, {traceback.format_exc()}")
             return ""
 
     def restore_punctuation(self, text):
@@ -101,7 +102,7 @@ class SpeechProcessor:
             punctuated_text = self.fastpunct.punct(text, correct=True)  # correct=True enables capitalization
             return punctuated_text
         except Exception as e:
-            print(f"Error while restoring punctuation: {e}")
+            print(f"[SOUND_PROCESSOR] Error while restoring punctuation: {e}")
             return text
 
     def _recognize_speech_vosk(self):
@@ -111,7 +112,7 @@ class SpeechProcessor:
             stream = audio_interface.open(
                 format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=8000)
             stream.start_stream()
-            print("Listening with Vosk...")
+            print("[SOUND_PROCESSOR] Listening with Vosk...")
             while True:
                 data = stream.read(4000, exception_on_overflow=False)
                 if len(data) == 0:
@@ -122,7 +123,7 @@ class SpeechProcessor:
                     if text:
                         return text
         except Exception as e:
-            print(f"Error recognizing speech with Vosk: {e}, {traceback.format_exc()}")
+            print(f"[SOUND_PROCESSOR] Error recognizing speech with Vosk: {e}, {traceback.format_exc()}")
             return ""
         finally:
             if stream:
@@ -144,7 +145,8 @@ class SpeechProcessor:
             new_volume = max(0, initial_volume - volume_step * (step + 1))
             sound.set_volume(new_volume)  # Update the volume
             pygame.time.wait(step_delay)  # Wait for the next step
-        sound.stop()  # Stop playback after the fade-out is complete
+        if sound:
+            sound.stop()  # Stop playback after the fade-out is complete
 
     def read_text(self, text, call_before=None, call_back=None, lang="en", tld="co.uk"):
         try:
@@ -157,41 +159,71 @@ class SpeechProcessor:
                 call_before()
             self.play_stream(audio_stream.read(), call_back=call_back)
         except Exception as e:
-            print(f"Error generating text-to-speech audio: {e}, {traceback.format_exc()}")
+            print(f"[SOUND_PROCESSOR] Error generating text-to-speech audio: {e}, {traceback.format_exc()}")
 
-    def play_stream(self, audio_stream, call_back=None, fade_out_duration_ms=FADEOUT_DURATION_MS):
+    def play_stream(self, audio_stream, call_back=None, fade_out_duration_ms=FADEOUT_DURATION_MS, do_not_interrupt=False):
         def playback_worker(stream):
             try:
-                # Initialize sound stream
-                pygame.mixer.init()
-                pygame_sound = pygame.mixer.Sound(io.BytesIO(stream))
-                pygame_sound.set_volume(1.0)  # Start at full volume
-                pygame_sound.play()  # Start playback
-                print("Playing audio stream...")
+                with self.mixer_lock:
+                    # Initialize the mixer only if it's not already initialized
+                    if not pygame.mixer.get_init():
+                        pygame.mixer.init()
+                        print("[SOUND_PROCESSOR] Mixer initialized for playback.")
 
-                while pygame.mixer.get_busy():  # Wait while audio is playing
-                    if self.stop_playback_event.is_set():  # Stop requested
-                        self._fade_out(pygame_sound, fade_out_duration_ms)
+                    # Load and play the sound
+                    pygame_sound = pygame.mixer.Sound(io.BytesIO(stream))
+                    pygame_sound.set_volume(1.0)
+                    pygame_sound.play()
+                    print("[SOUND_PROCESSOR] Playing audio stream...")
+
+                # Wait for the playback to complete or stop if requested
+                while pygame.mixer.get_busy():
+                    if self.stop_playback_event.is_set() and not do_not_interrupt:  # Do not interrupt if flagged
+                        print("[SOUND_PROCESSOR] Stop requested. Initiating fade-out...")
+                        with self.mixer_lock:
+                            self._fade_out(pygame_sound, fade_out_duration_ms)
                         break
-                    pygame.time.wait(100)  # Wait before re-checking if sound is playing
-            except Exception as e:
-                print(f"Error during audio playback: {e}, {traceback.format_exc()}")
-            finally:
-                pygame.mixer.quit()  # Cleanup the mixer
-                self.stop_playback_event.clear()
-            if call_back and callable(call_back):
-                # print("play_stream() Calling after function...")
-                call_back()
+                    pygame.time.wait(100)
 
+            except pygame.error as e:
+                print(f"[SOUND_PROCESSOR] Pygame error during playback: {e}")
+            except Exception as e:
+                print(f"[SOUND_PROCESSOR] Unhandled error during playback: {e}, {traceback.format_exc()}")
+            finally:
+                with self.mixer_lock:
+                    # Quit mixer after playback is done
+                    if pygame.mixer.get_init():
+                        pygame.mixer.quit()
+                        print("[SOUND_PROCESSOR] Mixer quit after playback.")
+                self.stop_playback_event.clear()
+
+                # Execute callback after playback ends
+                if call_back and callable(call_back):
+                    call_back()
+
+        # If `do_not_interrupt` is False, stop any currently playing sound
+        if not do_not_interrupt:
+            if self.playback_thread and self.playback_thread.is_alive():
+                print("[SOUND_PROCESSOR] Interrupting previous playback thread...")
+                self.stop_playback_event.set()
+                self.playback_thread.join()  # Wait for the previous thread to properly finish
+
+        # If `do_not_interrupt` is True, wait for any ongoing playback to finish
+        if do_not_interrupt and self.playback_thread and self.playback_thread.is_alive():
+            print("[SOUND_PROCESSOR] Waiting for previous sound to complete...")
+            self.playback_thread.join()  # Wait until the active playback finishes completely
+
+        # Start a new playback thread
+        self.stop_playback_event.clear()
         self.playback_thread = threading.Thread(target=playback_worker, args=(audio_stream,), daemon=True)
         self.playback_thread.start()
 
     def stop_sound(self, call_back=None):
         with self.mixer_lock:
             if not pygame.mixer.get_init():
-                # print("Mixer not initialized — cannot stop sound.")
+                print("[SOUND_PROCESSOR] Mixer not initialized — cannot stop sound.")
                 return
-            print(f"Stopping audio playback with fade-out...")
+            print(f"[SOUND_PROCESSOR] Stopping audio playback with fade-out...")
             self.stop_playback_event.set()
             # Make sure we wait a bit longer than the fade
             pygame.time.wait(self.FADEOUT_DURATION_MS + 100)
@@ -203,7 +235,7 @@ class SpeechProcessor:
         with self.mixer_lock:
             if pygame.mixer.get_init():
                 pygame.mixer.quit()
-                print("Pygame mixer shut down.")
+                print("[SOUND_PROCESSOR] Pygame mixer shut down.")
 
     @staticmethod
     def wait(duration_ms):
@@ -233,7 +265,7 @@ class SpeechProcessorTTSX3(SpeechProcessor):
         self.set_voice(self.DEFAULT_VOICE)
         self.set_rate(self.DEFAULT_RATE)
 
-    def read_text(self, text, call_before=None, call_back=None, lang="en", tld="co.uk"):
+    def read_text(self, text, call_before=None, call_back=None, lang="en", tld="co.uk", do_not_interrupt=False):
         try:
             if call_before and callable(call_before):
                 # print("read_text() Calling before function...")
@@ -249,22 +281,22 @@ class SpeechProcessorTTSX3(SpeechProcessor):
                         self.set_voice(self.current_voice)
             with open(self.audio_output_file, "rb") as file:
                 audio_data = file.read()
-            self.play_stream(audio_data, call_back=call_back)
+            self.play_stream(audio_data, call_back=call_back, do_not_interrupt=do_not_interrupt)
         except Exception as e:
-            print(f"Error generating text-to-speech audio with pyttsx3: {e}, {traceback.format_exc()}")
+            print(f"[SOUND_PROCESSOR] Error generating text-to-speech audio with pyttsx3: {e}, {traceback.format_exc()}")
 
     def set_voice(self, voice_name):
         if voice_name in self.voices:
             self.engine.setProperty('voice', self.voices[voice_name]['id'])
             self.current_voice = voice_name
-            print(f"Voice set to: {voice_name}")
+            print(f"[SOUND_PROCESSOR] Voice set to: {voice_name}")
         else:
-            print(f"Voice '{voice_name}' not found.")
+            print(f"[SOUND_PROCESSOR] Voice '{voice_name}' not found.")
 
     def set_rate(self, rate):
         self.engine.setProperty('rate', rate)
         self.rate = rate
-        print(f"Rate set to: {rate}")
+        print(f"[SOUND_PROCESSOR] Rate set to: {rate}")
 
     def _list_voices(self):
         """Fetch available voices."""
@@ -278,38 +310,27 @@ class SpeechProcessorTTSX3(SpeechProcessor):
         """Cleanly shut down pyttsx3 engine."""
         with self.mixer_lock:
             self.engine.stop()
-            print("pyttsx3 engine shut down.")
+            print("[SOUND_PROCESSOR] pyttsx3 engine shut down.")
 
 
 # Usage
 if __name__ == "__main__":
     processor = SpeechProcessorTTSX3()
-
+    from varstore import THINKING_SOUNDS, HELLOS
 
     def test_playback():
+
+
         print("Testing playback...")
-
-        processor.read_text("hmm... ooh... ahh... uhh.. aha... sure... oh... ok... yup... yes... right...")
-        pygame.time.wait(1000)
-        processor.stop_sound()
-        # pygame.time.wait(1000)
-        processor.read_text("This is a test. Let's see if the fade-out works properly.")
-        pygame.time.wait(processor.WAIT_DURATION_MS)
-        processor.stop_sound()
-        # pygame.time.wait(WAIT_DURATION_MS)
-        processor.read_text("This is the second sound test. Let's see if the start of the second sound works properly.")
-        pygame.time.wait(processor.WAIT_DURATION_MS)
-        processor.stop_sound()
-        # pygame.time.wait(WAIT_DURATION_MS)
-        processor.read_text("This is third test... works properly?")
-
-        from varstore import THINKING_SOUNDS
-        processor.read_text(" ".join(THINKING_SOUNDS))
-
+        for helo in HELLOS:
+            processor.read_text(helo)
+        # processor.read_text(". ".join(HELLOS))
+        # processor.read_text(" ".join(THINKING_SOUNDS))
 
     # threading.Thread(target=test_playback, daemon=True).start()
-
-    print(processor._list_voices())
+    print("Testing playback...")
+    for helo in HELLOS:
+        processor.read_text(helo, do_not_interrupt=True)
 
     while True:
         pass

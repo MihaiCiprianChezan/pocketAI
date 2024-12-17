@@ -219,11 +219,11 @@ class EnergyBall(QWidget):
             self.pulsating = False
             if hasattr(self, "pulse_timer"):
                 self.pulse_timer.stop()
-                print("Pulsating stopped.")
+                print("[ENERGY] Pulsating stopped.")
             return  # Exit if we are stopping pulsating
 
         # Initialize pulsating effect
-        print("Pulsating started.")
+        print("[ENERGY] Pulsating started.")
         self.pulsating = True
 
         # Create a timer for random intervals
