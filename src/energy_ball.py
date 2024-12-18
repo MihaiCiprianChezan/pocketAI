@@ -104,7 +104,7 @@ class EnergyBall(QWidget):
 
         self.move(screen_width - widget_width - padding, screen_height - widget_height - padding)
 
-    def set_colorized(self, target_color: QColor, duration=800):
+    def set_colorized(self, target_color: QColor, duration=500):
         """
         Smoothly transition to the target color using QVariantAnimation.
         :param target_color: QColor to transition to.
@@ -267,7 +267,7 @@ class EnergyBall(QWidget):
         # Trigger the first pulse immediately
         schedule_next_pulse()
 
-    def reset_colorized(self, command, _params=None, duration=900):
+    def reset_colorized(self, command, _params=None, duration=500):
         """
         Smoothly transition to no graphic effect.
         """

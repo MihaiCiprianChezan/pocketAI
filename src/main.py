@@ -74,7 +74,7 @@ class VoiceApp(QObject):
             ("translate", "into", "spanish"): lambda a: self.translate_selected_text(a, 'es'),
             ("translate", "to", "chinese"): lambda a: self.translate_selected_text(a, 'zh'),
             ("translate", "into", "chinese"): lambda a: self.translate_selected_text(a, 'zh'),
-            ("exit", "app"): lambda a: self.exit_app,
+            ("exit", "app"): lambda a: self.exit_app(),
         }
 
     @staticmethod
@@ -159,19 +159,22 @@ class VoiceApp(QObject):
         # >>> chat with the assistant the spoken text ==========================================
         # We prevent going into self conversation loops, to stop the assistant use 'hold on' type commands
         if self.chat_mode or addresses_assistant:
+            if not self.assistant_speaking:
+                print(f"[APP] (!) Assistant IS NOT currently speaking ...")
+            else:
+                print(f"[APP] <!> Assistant IS currently speaking ...")
+                return
             if not prompt_is_valid and not is_command:
                 print(f"[APP] <!> Prompt {tokens} is NOT VALID FOR CHAT and is NEITHER A COMMAND: {spoken}")
                 if not self.assistant_speaking:
                     self.read_unique(UNCLEAR_PROMPT_RESPONSES, speaking_color=self.UNCERTAIN, after_color=self.INITIAL)
                 return
-            if self.assistant_speaking:
-                print(f"[APP] <!> Assistant is currently speaking ...")
-                return
             if is_command:
                 print(f"[APP] (i) COMMAND detected in prompt {tokens} ...")
                 return
-            print(f"[APP] (i) Prompting AI Assistant ...")
-            response = self.get_ai_response(self.speech_processor.restore_punctuation(spoken))
+            prompt = self.speech_processor.restore_punctuation(spoken)
+            print(f"[APP] (i) Prompting AI Assistant with: {prompt} ...")
+            response = self.get_ai_response(prompt)
             if response:
                 self.assistant_speaking = True
                 self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
@@ -360,11 +363,12 @@ class VoiceApp(QObject):
 
     def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en", do_not_interrupt=False):
         print(f"[APP] Assistant starting to script: {speech_script}, Ball Color: {speaking_color}")
-        # self.speech_processor.stop_sound()
+        call_before = lambda: self.speak_call_before(color=speaking_color) if speaking_color else None
+        call_back = lambda: self.speak_callback(color=after_color) if after_color else None
         self.speech_processor.read_text(
             speech_script,
-            call_before=lambda: self.speak_call_before(color=speaking_color),
-            call_back=lambda: self.speak_callback(color=after_color),
+            call_before=call_before,
+            call_back=call_back,
             lang=lang,
             do_not_interrupt=do_not_interrupt)
 
