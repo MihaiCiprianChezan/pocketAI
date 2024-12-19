@@ -20,21 +20,17 @@ class EnergyBall(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setStyleSheet("background: transparent;")  # Fully transparent widget
-
         # Load the GIF and dynamically set its size
         self.movie = QMovie(gif_path)
         self.movie.start()
         self.original_size = (self.movie.frameRect().width(), self.movie.frameRect().height())
-
         # Initialize QLabel
         self.label = QLabel(self)
         self.label.setAttribute(Qt.WA_TranslucentBackground, True)
         self.label.setMovie(self.movie)
-
         layout = QVBoxLayout()
         layout.addWidget(self.label)
         self.setLayout(layout)
-
         # State variables for interaction
         self.is_dragging = False
         self.offset = None
@@ -47,7 +43,7 @@ class EnergyBall(QWidget):
         if command == "reset_colorized":
             self.reset_colorized(command, params)
         elif command == "change_color":
-            self.change_color(command, params)
+            self.handle_change_color(command, params)
         elif command == "start_pulsating":
             self.start_pulsating(command, params)
         elif command == "stop_pulsating":
@@ -56,6 +52,13 @@ class EnergyBall(QWidget):
             self.zoom_effect_wrapper(command, params)
         elif command == "exit":
             QCoreApplication.quit()
+
+    def handle_change_color(self, command, params):
+        color = params.get("color", (0, 0, 0))
+        if color == (0, 0, 0):
+            self.reset_colorized(command, params)
+        else:
+            self.change_color(command, params)
 
     # Slot to handle color change
     def change_color(self, command=None, params={}):
@@ -83,12 +86,9 @@ class EnergyBall(QWidget):
         """
         # Create the menu
         menu = QMenu(self)
-
         exit_action = QAction("Exit", self)
-
         exit_action.triggered.connect(QApplication.quit)
         menu.addAction(exit_action)
-
         # Display the menu at the requested position (mouse position or event position)
         menu.exec(self.mapToGlobal(position))
 
@@ -98,22 +98,22 @@ class EnergyBall(QWidget):
         """
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         screen_width, screen_height = screen_geometry.width(), screen_geometry.height()
-
         padding = 100
         widget_width, widget_height = self.original_size
-
         self.move(screen_width - widget_width - padding, screen_height - widget_height - padding)
 
-    def set_colorized(self, target_color: QColor, duration=500):
-        """
-        Smoothly transition to the target color using QVariantAnimation.
-        :param target_color: QColor to transition to.
-        """
+    def set_colorized(self, target_color: QColor, duration=800):
+        if self.current_color == target_color:
+            self.label.setGraphicsEffect(None)
+            self.current_color = None
+        if self.current_color is None:
+            self.current_color = QColor(0, 0, 0)
         animation = QVariantAnimation(self)
         animation.setStartValue(self.current_color)
         animation.setEndValue(target_color)
-        animation.setDuration(duration)  # Transition duration in ms
+        animation.setDuration(duration)
         animation.valueChanged.connect(self.apply_color)
+        # animation.finished.connect(lambda: print(f"[DEBUG] Transition complete to {target_color}"))
         animation.start()
 
     def apply_color(self, color: QColor):
@@ -182,7 +182,6 @@ class EnergyBall(QWidget):
         original_width, original_height = self.original_size
         zoomed_width = int(original_width * zoom_factor)
         zoomed_height = int(original_height * zoom_factor)
-
         # Create the animation for the zoom effect
         animation = QVariantAnimation(self)
         animation.setStartValue(QSize(original_width, original_height))  # Start at original size
@@ -283,7 +282,10 @@ class EnergyBall(QWidget):
         def fade_out_effect(opacity):
             if self.label.graphicsEffect() and isinstance(self.label.graphicsEffect(), QGraphicsColorizeEffect):
                 self.label.graphicsEffect().setStrength(opacity)  # Set effect strength dynamically
-            if opacity == 0.0:  # At the end of the transition, remove the effect
+            if opacity == 0.0:
+                effect = self.label.graphicsEffect()
+                if isinstance(effect, QGraphicsColorizeEffect):
+                    effect.setStrength(1.0)  # Reset strength for future use
                 self.label.setGraphicsEffect(None)
 
         # Connect the animation's valueChanged signal to dynamically update the effect

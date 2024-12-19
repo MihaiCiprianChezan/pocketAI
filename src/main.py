@@ -12,9 +12,7 @@ from assistant import ChatAssistant
 from energy_ball import EnergyBall
 from speech_processor import SpeechProcessorTTSX3
 from utils import *
-from varstore import BLUE, YELLOW, MAGENTA, FAST_ZOOM, SHORT_CONFIRMS, \
-    GOODBYES, HELLOS, POLITE_RESPONSES, ACKNOWLEDGEMENTS, LANGUAGES, WAITING_SOUNDS, \
-    UNCLEAR_PROMPT_RESPONSES, PINK, RED, ORANGE
+from varstore import *
 
 
 class VoiceApp(QObject):
@@ -22,13 +20,14 @@ class VoiceApp(QObject):
     send_command_to_ball = Signal(str, dict)  # str: command, dict: optional parameters
 
     NAME = "Opti"
-    HELLO = PINK
+    HELLO = YELLOW
     GENERATING = MAGENTA
     SPEAKING = BLUE
     OPERATING_TEXT = YELLOW
-    INITIAL = {"color": "initial"}
+    INITIAL = TRANSPARENT
     PROFANITY = RED
     UNCERTAIN = ORANGE
+    PAUSED = LIGHT_GREY
 
     def __init__(self):
         super().__init__()
@@ -50,9 +49,15 @@ class VoiceApp(QObject):
             # a = for_assistant
             ("enter", "edit", "mode"): lambda a: self.activate_write_mode(),
             ("exit", "edit", "mode"): lambda a: self.deactivate_write_mode(),
+            # start chat mode
             ("start", "chat", "mode"): lambda a: self.start_chat(),
+            ("resume", "chat"): lambda a: self.start_chat(),
+            ("chat", "again"): lambda a: self.start_chat(),
+            # pause chat mode
             ("pause", "chat"): lambda a: self.pause_chat(),
-            ("stop", "chat", "mode"): lambda a: self.stop_chat(),
+            ("have", "pause"): lambda a: self.pause_chat(),
+            ("stop", "chat"): lambda a: self.pause_chat(),
+
             # Interruption commands
             ("wait", "stop"): lambda a: self.handle_stop_command(),
             ("wait", "wait"): lambda a: self.handle_stop_command(),
@@ -79,6 +84,7 @@ class VoiceApp(QObject):
 
     @staticmethod
     def init_write_commands():
+        # TODO: Maybe translate inline text, correct text, chat inline in the text.
         return {
             ("new", "line"): lambda: keyboard.write("\n"),
             ("copy", "copy"): lambda: keyboard.send("ctrl+c"),
@@ -203,8 +209,7 @@ class VoiceApp(QObject):
     def activate_write_mode(self):
         """Activate write mode."""
         if not self.in_write_mode:
-            self.speech_processor.read_text("Edit Mode was activated!", call_before=None, call_back=None)
-            self.ball_change_color(self.OPERATING_TEXT)
+            self.agent_speak("Edit Mode Activated!", after_color=self.OPERATING_TEXT)
             self.in_write_mode = True
         else:
             self.speech_processor.read_text("Edit mode is already active!", call_before=None, call_back=None)
@@ -220,23 +225,23 @@ class VoiceApp(QObject):
 
     def start_chat(self):
         """Start chat mode."""
-        self.speech_processor.read_text("Chat mode Activated!", call_before=None, call_back=None)
-        self.chat_mode = True
-        self.history = []
-        print("[APP] Chat mode activated.")
+        if not self.chat_mode:
+            self.agent_speak("Chat resumed!", speaking_color=self.INITIAL, after_color=self.INITIAL)
+            self.chat_mode = True
+            self.history = []
+            print("[APP] Chat mode resumed.")
+            return
+        self.agent_speak("Already active!")
+
 
     def pause_chat(self):
         """Pause chat mode."""
-        self.speech_processor.read_text("Chat mode Paused!", call_before=None, call_back=None)
-        self.chat_mode = False
-        print("[APP] Chat mode paused.")
-
-    def stop_chat(self):
-        """Stop chat mode."""
-        self.speech_processor.read_text("Closing Chat mode...", call_before=None, call_back=None)
-        self.history = []
-        self.chat_mode = False
-        print("[APP] Chat mode deactivated.")
+        if self.chat_mode:
+            self.agent_speak("Chat paused!", speaking_color=self.PAUSED, after_color=self.PAUSED)
+            self.chat_mode = False
+            print("[APP] Chat mode paused.")
+            return
+        self.agent_speak("Already Paused! If you want to chat, speak the resume command!")
 
     def handle_stop_command(self):
         """Handle 'stop' or 'hold on' commands."""
@@ -301,6 +306,7 @@ class VoiceApp(QObject):
         try:
             print("[APP] Exiting the program...")
             self.read_unique(GOODBYES, do_not_interrupt=True)
+            self.speech_processor.wait(3000)
             self.speech_processor.stop_sound(call_back=None)
             self.emit_exit()
             sys.exit(0)
@@ -362,9 +368,13 @@ class VoiceApp(QObject):
     # --------------------- Energy ball related ----------------------------
 
     def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en", do_not_interrupt=False):
-        print(f"[APP] Assistant starting to script: {speech_script}, Ball Color: {speaking_color}")
-        call_before = lambda: self.speak_call_before(color=speaking_color) if speaking_color else None
-        call_back = lambda: self.speak_callback(color=after_color) if after_color else None
+        print(f"[APP][ASSISTANT] Says: \"{speech_script}\" [Energy Color: {speaking_color}]")
+        call_before = self.speak_call_before
+        call_back = self.speak_callback
+        if speaking_color:
+            call_before = lambda: self.speak_call_before(color=speaking_color)
+        if after_color:
+            call_back = lambda: self.speak_callback(color=after_color)
         self.speech_processor.read_text(
             speech_script,
             call_before=call_before,
@@ -380,10 +390,7 @@ class VoiceApp(QObject):
 
     def speak_callback(self, color=None):
         if color:
-            if color == self.INITIAL:
-                self.ball_reset_colorized()
-            else:
-                self.ball_change_color(color)
+            self.ball_change_color(color)
         self.ball_stop_pulsating()
         self.assistant_speaking = False
 
@@ -395,12 +402,12 @@ class VoiceApp(QObject):
 
     def ball_change_color(self, color):
         self.send_command_to_ball.emit("change_color", color)
-        sleep(0.3)
+
 
     def ball_start_pulsating(self):
         # self.send_command_to_ball.emit("change_color", color)
         self.send_command_to_ball.emit("start_pulsating", {})
-        sleep(0.3)
+
 
     def ball_reset_colorized(self):
         self.send_command_to_ball.emit("reset_colorized", {})
@@ -408,7 +415,7 @@ class VoiceApp(QObject):
     def ball_stop_pulsating(self):
         """Stop pulsating the ball."""
         self.send_command_to_ball.emit("stop_pulsating", {})
-        sleep(0.3)
+
 
     def emit_exit(self):
         """Stop pulsating the ball."""

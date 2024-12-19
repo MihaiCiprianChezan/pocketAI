@@ -5,10 +5,11 @@ NON_ALPHANUMERIC_REGEX = re.compile(r'[^a-zA-Z0-9\s]')
 MULTIPLE_SPACES_REGEX = re.compile(r'\s+')
 
 # Colorize colors for ball effects
-RED = {"color": (89, 0, 0)}
-BLUE = {"color": (0, 23, 112)}
-GREEN = {"color": (0, 100, 0)}
-YELLOW = {"color": (65, 60, 0)}
+RED = {"color": (80, 0, 0)}
+BLUE = {"color": (0, 10, 100)}
+GREEN = {"color": (0, 60, 0)}
+YELLOW = {"color": (135, 105, 35)}
+BRIGHT_YELLOW = {"color": (212, 175, 55)}
 MAGENTA = {"color": (60, 0, 60)}
 GREY = {"color": (50, 50, 50)}
 ORANGE = {"color": (100, 50, 0)}
@@ -20,6 +21,7 @@ PURPLE = {"color": (50, 0, 100)}
 TURQUOISE = {"color": (0, 100, 100)}
 DARK_GREY = {"color": (30, 30, 30)}
 LIGHT_GREY = {"color": (80, 80, 80)}
+TRANSPARENT = {"color": (0, 0, 0)}
 
 # Zoom effects for the ball
 SLOW_GROW = {"factor": 1.1, "duration": 1500}
