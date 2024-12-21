@@ -1,27 +1,29 @@
 from threading import Thread, Lock
 
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
-from accelerate import infer_auto_device_map
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from torch.quantization import quantize_dynamic
+from transformers import TextIteratorStreamer
+
+from app_logger import AppLogger
+
 
 class ChatAssistant:
     def __init__(self, model_name="THUDM/glm-edge-1.5b-chat", device_map="auto"):
         # Initialize lock
         self.history_lock = Lock()
+        self.logger = AppLogger()
 
         # device_map = infer_auto_device_map(self.model, max_memory={0: "12GB", 1: "12GB"})
 
         # Load model and tokenizer
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        print("Loading model to device: ", self.device)
+        self.logger.debug(f"[CHAT_ASSISTANT] Loading model to device: {self.device}")
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map=device_map,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32).to(self.device)
-        print("Optimizing model for inference...")
+        self.logger.debug("[CHAT_ASSISTANT] Optimizing model for inference...")
         self.model = torch.compile(self.model, mode="max-autotune")
 
         # Pre-warm the model to initialize CUDA kernels
@@ -44,11 +46,11 @@ class ChatAssistant:
             "role": "system",
             "content": {
                 "You are Opti, a friendly AI assistant. "
-                "Provide concise, natural responses. "
-                "Limit your responses in less than 256 characters when possible. "
+                "DO NOT salute or greet the user (consider salutations have already been done before)."
                 "Use a warm, engaging, live chat tone. "
-                "Respond in continuous paragraphs, avoid lists and tables, avoid markup or formatting."
-                "Do not salute or greet the user (consider salutations have already been done before)."
+                "Provide concise, natural responses. "
+                "Limit your responses to less than 256 characters when possible. "
+                "Output only plain text (NO lists, NO tables, NO backticks and NO markdown), in a single line, without any formatting or additional comments."
             }
         })
 
@@ -81,7 +83,7 @@ class ChatAssistant:
             try:
                 self.model.generate(**generate_kwargs)
             except Exception as e:
-                print(f"Error during generation: {e}")
+                self.logger.debug(f"[CHAT_ASSISTANT] Error during generation: {e}")
 
         # Start generation in a thread
         t = Thread(target=generate_in_thread)
@@ -98,24 +100,22 @@ class ChatAssistant:
         t.join()
         return response
 
-    def get_response(self, history, message, return_iter=True, lang="en"):
+    def get_response(self, history, message, return_iter=True, lang="en", context_free=False):
         """
-        Get the entire response at once
-        response = self.get_response(history, "Hello!")
-        print(response) > Final output as a single string
-
-        Get the response incrementally as an iterator
-        response_stream = self.get_response(history, "Hello!", return_iter=True)
-        for partial_response in response_stream:
-        print(partial_response)  >  intermediate updates as they are generated
+        Generates a response based on the conversation history or a standalone task-specific prompt.
         """
         if lang:
             # TODO: handle multilanguage prompts ...
             pass
 
-        if not history:
-            history = []
-        history.append([message, ""])  # Append user message with empty reply
+        if not context_free:
+            if not history:
+                history = []
+            history.append([message, ""])  # Append user message with empty reply
+        else:
+            # For context-free tasks, only use the current message
+            history = [[message, ""]]
+
         # Full response generation
         response = ""
 
