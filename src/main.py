@@ -80,6 +80,9 @@ class VoiceApp(QObject):
 
             ("read", "this"): lambda a: self.read_selected_text(a),
             ("explain", "this"): lambda a: self.explain_selected_text(a),
+            ("summarize", "this"): lambda a: self.summarize_selected_text(a),
+
+
             ("translate", "to", "english"): lambda a: self.translate_selected_text(a, 'en'),
             ("translate", "into", "english"): lambda a: self.translate_selected_text(a, 'en'),
             ("translate", "to", "french"): lambda a: self.translate_selected_text(a, 'fr'),
@@ -96,19 +99,21 @@ class VoiceApp(QObject):
     def init_write_commands(self):
         # TODO: Maybe translate inline text, correct text, chat inline in the text.
         return {
-            ("new", "line"): lambda a: keyboard.write("\n"),
-            ("copy", "copy"): lambda a: keyboard.send("ctrl+c"),
-            ("paste", "paste"): self.utils.paste_at_cursor,
-            ("cut", "cut"): lambda a: keyboard.send("ctrl+x"),
-            ("delete", "delete"): lambda a: keyboard.send("delete"),
-            ("select", "all"): lambda a: keyboard.send("ctrl+a"),
-            ("select", "word"): lambda a: keyboard.send("ctrl+shift+left"),
-            ("select", "line"): lambda a: keyboard.send("ctrl+shift+down"),
-            ("select", "paragraph"): lambda a: keyboard.send("ctrl+shift+up"),
-            ("up", "up"): lambda a: keyboard.send("up"),
-            ("down", "down"): lambda a: keyboard.send("up"),
-            ("left", "left"): lambda a: keyboard.send("up"),
-            ("right", "right"): lambda a: keyboard.send("up"),
+            ("new", "line"): lambda a: self.edit_action("enter", "New line."),
+            ("copy", "text"): lambda a: self.edit_action("ctrl+c", "Copied."),
+            ("paste", "text"): lambda a: self.edit_action("ctrl+v", "Pasted."),
+            ("cut", "text"): lambda a: self.edit_action("ctrl+x", "Cut."),
+            ("delete", "text"): lambda a: self.edit_action("delete", "Deleted."),
+            ("select", "all"): lambda a: self.edit_action("ctrl+a", "Selected all."),
+            ("select", "word"): lambda a: self.edit_action("ctrl+shift+left", "Selected word."),
+            ("select", "line"): lambda a: self.edit_action("ctrl+shift+down", "Selected line."),
+            ("select", "paragraph"): lambda a: self.edit_action("ctrl+shift+up", "Selected paragraph."),
+            ("move", "up"): lambda a: self.edit_action("up", "Up.") ,
+            ("move", "down"): lambda a: self.edit_action("down", "Down."),
+            ("move", "left"): lambda a: self.edit_action("left", "Left."),
+            ("move", "right"): lambda a: self.edit_action("right", "Right."),
+            ("undo", "please"): lambda a: self.edit_action("ctrl+z", "Undo."),
+            ("redo", "please"): lambda a: self.edit_action("ctrl+shift+z", "Redo."),
 
             # EDIT MODE exit - Will NOT run edit commands
             ("exit", "editing"): lambda a: self.deactivate_write_mode(a),
@@ -127,6 +132,18 @@ class VoiceApp(QObject):
             ("translate", "to", "chinese"): lambda a: self.edit_translate_text(a, 'zh'),
             ("translate", "into", "chinese"): lambda a: self.edit_translate_text(a, 'zh'),
         }
+
+    def edit_action(self, keys, confirmation=""):
+        keyboard.send(keys)
+        if confirmation:
+            self.agent_speak(confirmation)
+
+    # def paste_copied(self, confirmation):
+    #     self.utils.paste_at_cursor()
+    #     if confirmation:
+    #         self.agent_speak(confirmation)
+
+
 
     def is_for_assistant(self, spoken, clean):
         return any(variant in clean or variant in spoken.lower() for variant in self.name_variants)
@@ -172,7 +189,7 @@ class VoiceApp(QObject):
         is_command = False
         prompt_is_profanity = profanity.contains_profanity(spoken)
         if prompt_is_profanity:
-            self.logger.info(f"[APP] <!> Profanity detected: {profanity.censor(spoken)}")
+            self.logger.debug(f"[APP] <!> Profanity detected: {profanity.censor(spoken)}")
             self.read_unique(POLITE_RESPONSES, speaking_color=self.PROFANITY, after_color=self.INITIAL)
             return
 
@@ -193,7 +210,7 @@ class VoiceApp(QObject):
                 is_command = True
             # write spoken text - DICTATE
             if not is_command:
-                self.logger.info(f"[APP] (i) Writing dictated text ...")
+                self.logger.debug(f"[APP] (i) Writing dictated text ...")
                 spoken = self.speech_processor.restore_punctuation(f"{spoken}")
                 # self.utils.write_text())
                 self.utils.write_text(f"{spoken} ")
@@ -228,7 +245,7 @@ class VoiceApp(QObject):
             # Prompt the AI Assistant if not in EDIT MODE
             if not self.edit_mode_active:
                 prompt = self.speech_processor.restore_punctuation(spoken)
-                self.logger.info(f"[APP] (i) Prompting AI Assistant with: {prompt} ...")
+                self.logger.debug(f"[APP] (i) Prompting AI Assistant with: {prompt} ...")
                 response = self.get_ai_response(prompt)
                 if response:
                     self.assistant_speaking = True
@@ -278,7 +295,7 @@ class VoiceApp(QObject):
             self.agent_speak("Chat resumed!", after_color=self.INITIAL)
             self.chat_mode = True
             self.history = []
-            self.logger.info("[APP] Chat mode resumed.")
+            self.logger.debug("[APP] Chat mode resumed.")
             return
         self.agent_speak("Chat mode is already active!")
 
@@ -288,25 +305,25 @@ class VoiceApp(QObject):
             if self.chat_mode:
                 self.agent_speak("Chat paused!", after_color=self.PAUSED)
                 self.chat_mode = False
-                self.logger.info("[APP] Chat mode paused.")
+                self.logger.debug("[APP] Chat mode paused.")
                 return
             self.agent_speak("Already Paused! If you want to chat, speak the resume command!")
 
     def handle_stop_command(self, is_for_assistant):
         """Handle 'stop' or 'hold on' commands."""
-        with Attention(is_for_assistant, "handle_stop_command()", self.logger):
-            if self.assistant_speaking:
-                try:
-                    self.logger.info("[APP] <!> Assistant IS speaking, stopping ...")
-                    self.assistant_speaking = False
-                    self.speech_processor.stop_sound()
-                    self.logger.debug("[APP] (i) Saying a short confirmation ...")
-                    self.read_unique(SHORT_CONFIRMS, speaking_color=self.SPEAKING, after_color=self.INITIAL, do_not_interrupt=True)
-                    self.logger.debug("[APP] (i) Speaking interrupted ...")
-                except Exception as e:
-                    self.logger.debug(f"[APP] Error stopping: {e}, {traceback.format_exc()}")
-                return
-            self.logger.debug("[APP] (i) Assistant IS NOT currently speaking, no reason to stop...")
+        # with Attention(is_for_assistant, "handle_stop_command()", self.logger):
+        if self.assistant_speaking:
+            try:
+                self.logger.debug("[APP] <!> Assistant IS speaking, stopping ...")
+                self.assistant_speaking = False
+                self.speech_processor.stop_sound()
+                self.logger.debug("[APP] (i) Saying a short confirmation ...")
+                self.read_unique(SHORT_CONFIRMS, speaking_color=self.SPEAKING, after_color=self.INITIAL, do_not_interrupt=True)
+                self.logger.debug("[APP] (i) Speaking interrupted ...")
+            except Exception as e:
+                self.logger.debug(f"[APP] Error stopping: {e}, {traceback.format_exc()}")
+            return
+        self.logger.debug("[APP] (i) Assistant IS NOT currently speaking, no reason to stop...")
 
     def read_selected_text(self, is_for_assistant):
         """Read the selected text."""
@@ -316,7 +333,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             text = pyperclip.paste()
             self.ball_change_color(self.OPERATING_TEXT)
-            self.agent_speak(text, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL)
+            self.agent_speak(text, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def explain_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""
@@ -326,9 +343,21 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"[APP] Please explain this: `{copied_text}`"
+            prompt = f"Please explain this: `{copied_text}`"
             ai_response = self.get_ai_response(prompt, lang=lang)
-            self.agent_speak(ai_response, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL)
+            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+
+    def summarize_selected_text(self, is_for_assistant, lang="en"):
+        """Summarize the selected text."""
+        with Attention(is_for_assistant, "explain_selected_text()", self.logger):
+            self.read_unique(ACKNOWLEDGEMENTS)
+            keyboard.send("ctrl+c")
+            sleep(0.3)
+            copied_text = pyperclip.paste()
+            copied_text = copied_text.replace('\n', '').strip()
+            prompt = f"Please summarize this: `{copied_text}`"
+            ai_response = self.get_ai_response(prompt, lang=lang)
+            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def translate_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""
@@ -358,7 +387,7 @@ class VoiceApp(QObject):
             keyboard.send("end")
             keyboard.send("space")
             sleep(0.3)
-            self.utils.write_text(f"{ai_response} ", delay=0.001)
+            self.utils.write_text(f"{ai_response} ", delay=0.03)
             self.agent_speak(f"Here's the text translated to {language}...", speaking_color=self.SPEAKING, after_color=self.OPERATING_TEXT, lang="en")
 
     def exit_app(self, is_for_assistant):
@@ -497,7 +526,7 @@ class VoiceApp(QObject):
                 self.logger.debug(f"[APP] Glitch in speech recognition: {spoken}")
                 spoken = ""
             if spoken:
-                self.logger.info(f"[APP][USER] Spoken: \"{spoken}\"")
+                self.logger.debug(f"[APP][USER] Spoken: \"{spoken}\"")
                 cleaned = spoken
                 self.process_command(spoken, cleaned)
             else:

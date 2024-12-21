@@ -251,10 +251,12 @@ class SpeechProcessor:
 
 
 class SpeechProcessorTTSX3(SpeechProcessor):
+    # DEFAULT_VOICE = "Microsoft Ryan (Natural) - English (United Kingdom)"  # Or your preferred default
     DEFAULT_VOICE = "Microsoft Sonia (Natural) - English (United Kingdom)"  # Or your preferred default
     DEFAULT_RATE = 180
     SUPPORTED_LANGUAGES = {
         "en": "Microsoft Sonia (Natural) - English (United Kingdom)",
+        # "en": "Microsoft Ryan (Natural) - English (United Kingdom)",
         "es": "Microsoft Dalia (Natural) - Spanish (Mexico)",
         "fr": "Microsoft Denise (Natural) - French (France)",
         "de": "Microsoft Katja (Natural) - German (Germany)",
