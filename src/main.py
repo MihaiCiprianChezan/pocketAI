@@ -3,8 +3,6 @@ import sys
 import threading
 import time
 import traceback
-from time import sleep
-import pyperclip
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
@@ -17,6 +15,9 @@ from energy_ball import EnergyBall
 from speech_processor import SpeechProcessorTTSX3
 from utils import *
 from varstore import *
+from dataclasses import dataclass
+from time import sleep
+from queue import Queue
 
 
 class VoiceApp(QObject):
@@ -40,6 +41,10 @@ class VoiceApp(QObject):
         self.speech_processor = SpeechProcessorTTSX3()
         self.chat_assistant = ChatAssistant()
         self.utils = Utils()
+
+        self.recognized_speech_queue = Queue(1000)  # Shared queue for recognized speech
+        self.speech_thread = None
+        self.speech_thread_running = False
 
         self.edit_mode_active = False
         self.buffer_text = ""
@@ -69,19 +74,18 @@ class VoiceApp(QObject):
             ("have", "pause"): lambda a: self.pause_chat(a),
             ("stop", "chat"): lambda a: self.pause_chat(a),
             # Interruption commands
-            ("wait", "stop"): lambda a: self.handle_stop_command(a),
-            ("wait", "wait"): lambda a: self.handle_stop_command(a),
-            ("stop", "stop"): lambda a: self.handle_stop_command(a),
-            ("ok", "thanks"): lambda a: self.handle_stop_command(a),
-            ("thank", "you"): lambda a: self.handle_stop_command(a),
-            ("hold", "on"): lambda a: self.handle_stop_command(a),
-            ("all", "right"): lambda a: self.handle_stop_command(a),
-            ("okay", "okay"): lambda a: self.handle_stop_command(a),
+            ("wait", "stop"): lambda a: self.interrupt_assistant(a),
+            ("wait", "wait"): lambda a: self.interrupt_assistant(a),
+            ("stop", "stop"): lambda a: self.interrupt_assistant(a),
+            ("ok", "thanks"): lambda a: self.interrupt_assistant(a),
+            ("thank", "you"): lambda a: self.interrupt_assistant(a),
+            ("hold", "on"): lambda a: self.interrupt_assistant(a),
+            ("all", "right"): lambda a: self.interrupt_assistant(a),
+            ("okay", "okay"): lambda a: self.interrupt_assistant(a),
 
             ("read", "this"): lambda a: self.read_selected_text(a),
             ("explain", "this"): lambda a: self.explain_selected_text(a),
             ("summarize", "this"): lambda a: self.summarize_selected_text(a),
-
 
             ("translate", "to", "english"): lambda a: self.translate_selected_text(a, 'en'),
             ("translate", "into", "english"): lambda a: self.translate_selected_text(a, 'en'),
@@ -108,7 +112,7 @@ class VoiceApp(QObject):
             ("select", "word"): lambda a: self.edit_action("ctrl+shift+left", "Selected word."),
             ("select", "line"): lambda a: self.edit_action("ctrl+shift+down", "Selected line."),
             ("select", "paragraph"): lambda a: self.edit_action("ctrl+shift+up", "Selected paragraph."),
-            ("move", "up"): lambda a: self.edit_action("up", "Up.") ,
+            ("move", "up"): lambda a: self.edit_action("up", "Up."),
             ("move", "down"): lambda a: self.edit_action("down", "Down."),
             ("move", "left"): lambda a: self.edit_action("left", "Left."),
             ("move", "right"): lambda a: self.edit_action("right", "Right."),
@@ -143,8 +147,6 @@ class VoiceApp(QObject):
     #     if confirmation:
     #         self.agent_speak(confirmation)
 
-
-
     def is_for_assistant(self, spoken, clean):
         return any(variant in clean or variant in spoken.lower() for variant in self.name_variants)
 
@@ -173,100 +175,63 @@ class VoiceApp(QObject):
         # Use zip to slide over the tokens
         for idx, token_window in enumerate(zip(*[tokens[i:] for i in range(token_count)])):
             if tuple(token_window) == searched_tokens:
-                self.logger.debug(f"[APP] Match found at index {idx}: {token_window} == {searched_tokens}")
+                self.logger.debug(f"[APP] (i) Match found at index {idx}: {token_window} == {searched_tokens}")
                 return True
 
         return False
 
-    def process_command(self, spoken, clean):
+    def process_command(self, spoken, clean, tokens, addresses_assistant):
         """Process voice commands and handle them using helper methods.
-        *                                                              *
         ****************************************************************
-        *                                                              *
         """
-
-        # Check and filter if prompt is a profanity/vulgarity
         is_command = False
-        prompt_is_profanity = profanity.contains_profanity(spoken)
-        if prompt_is_profanity:
-            self.logger.debug(f"[APP] <!> Profanity detected: {profanity.censor(spoken)}")
-            self.read_unique(POLITE_RESPONSES, speaking_color=self.PROFANITY, after_color=self.INITIAL)
-            return
-
-        # Check if prompt makes sense for a chat
-        prompt_is_valid = self.utils.is_prompt_valid(spoken, clean)
-
-        # addresses_assistant = self.is_for_assistant(spoken, clean) or self.chat_mode
-        addresses_assistant = self.is_for_assistant(spoken, clean)
-        if addresses_assistant:
-            self.logger.debug(f"[APP] (i) Prompt mentions AI Assistant name ...")
-            clean, spoken = self.clean_name(spoken, clean)
-        tokens = clean.split()
-
-        # -------------------------------------------------------------------------------------
-        # >>> write-mode -- to issue 'general commands' exiting from write mode is required ===
+        # Write-mode -- to issue 'general commands' exiting from write mode is required
         if self.edit_mode_active:
             if self.handle_commands(tokens, self.write_commands):
                 is_command = True
-            # write spoken text - DICTATE
+            # Write spoken text (DICTATE)
             if not is_command:
                 self.logger.debug(f"[APP] (i) Writing dictated text ...")
                 spoken = self.speech_processor.restore_punctuation(f"{spoken}")
-                # self.utils.write_text())
                 self.utils.write_text(f"{spoken} ")
 
-        # -------------------------------------------------------------------------------------
-        # >>> general commands -- to issue 'general commands' must not be in write mode =======
+        # General commands (must NOT be in write mode) -- to issue 'general commands'
         elif self.handle_commands(tokens, self.general_commands, addresses_assistant or self.chat_mode):
             is_command = True
+        return is_command
 
+    def process_chat(self, spoken, addresses_assistant):
         # -------------------------------------------------------------------------------------
         # >>> chat with the assistant the spoken text ==========================================
         # We prevent going into self conversation loops, to stop the assistant use 'hold on' type commands
-        if self.chat_mode or addresses_assistant:
-            if not self.assistant_speaking:
-                self.logger.debug(f"[APP] (!) AI Assistant IS NOT currently speaking ...")
-            else:
-                self.logger.debug(f"[APP] <!> AI Assistant IS currently speaking ...")
-                return
-            if is_command:
-                self.logger.debug(f"[APP] (i) COMMAND detected in prompt {tokens} ...")
-                return
+        if not self.assistant_speaking:
+            self.logger.debug(f"[APP] (!) AI Assistant <is NOT> currently speaking ...")
+        else:
+            self.logger.debug(f"[APP] <!> AI Assistant <IS> currently speaking ...")
+            self.interrupt_assistant(True)
 
-            # Unclear prompts neither commands neither chats
-            if not prompt_is_valid and not is_command and not self.edit_mode_active:
-                # Respond only to longer valid prompts when not in editing mode
-                if len(tokens) > 1:
-                    self.logger.debug(f"[APP] <!> Prompt {tokens} is NOT VALID FOR CHAT and is NEITHER A COMMAND: {spoken}")
-                    if not self.assistant_speaking:
-                        self.read_unique(UNCLEAR_PROMPT_RESPONSES, speaking_color=self.UNCERTAIN, after_color=self.INITIAL)
-                return
-
-            # Prompt the AI Assistant if not in EDIT MODE
-            if not self.edit_mode_active:
-                prompt = self.speech_processor.restore_punctuation(spoken)
-                self.logger.debug(f"[APP] (i) Prompting AI Assistant with: {prompt} ...")
-                response = self.get_ai_response(prompt)
-                if response:
-                    self.assistant_speaking = True
-                    self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        prompt = self.speech_processor.restore_punctuation(spoken)
+        self.logger.debug(f"[APP] (i) Prompting AI Assistant with: {prompt} ...")
+        response = self.get_ai_response(prompt)
+        if response:
+            self.assistant_speaking = True
+            self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def handle_commands(self, tokens, commands, for_assistant=None):
+
+        self.logger.debug(f"[APP] (i) for_assistant: {for_assistant}, self.chat_mode: {self.chat_mode}, ...")
+
         """Handle commands and return True if a command was handled."""
         for command_tokens, action in commands.items():
             # self.debug_match_commands(tokens, command_tokens)
             if self.is_command(tokens, command_tokens):
                 action(for_assistant)
-                # if for_assistant is not None:
-                #     action(for_assistant)
-                # else:
-                #     action()
                 return True  # Command was handled
         return False  # No command was recognized
 
     def debug_match_commands(self, tokens, command_tokens):
         self.logger.debug(
-            f"[APP] [DEBUG] is_command: {self.is_command(tokens, command_tokens)}, "
+            f"[APP] [DEBUG] (i) is_command: {self.is_command(tokens, command_tokens)}, "
             f"command_tokens: {command_tokens}, tokens: {tokens}, "
             f"command_tokens in tokens: {command_tokens in tokens}, "
             f"command_tokens == tokens: {command_tokens == tokens}"
@@ -295,7 +260,7 @@ class VoiceApp(QObject):
             self.agent_speak("Chat resumed!", after_color=self.INITIAL)
             self.chat_mode = True
             self.history = []
-            self.logger.debug("[APP] Chat mode resumed.")
+            self.logger.debug("[APP] (i) Chat mode resumed.")
             return
         self.agent_speak("Chat mode is already active!")
 
@@ -305,25 +270,27 @@ class VoiceApp(QObject):
             if self.chat_mode:
                 self.agent_speak("Chat paused!", after_color=self.PAUSED)
                 self.chat_mode = False
-                self.logger.debug("[APP] Chat mode paused.")
+                self.logger.debug("[APP] (i) Chat mode paused.")
                 return
             self.agent_speak("Already Paused! If you want to chat, speak the resume command!")
 
-    def handle_stop_command(self, is_for_assistant):
+    def interrupt_assistant(self, is_for_assistant=False):
         """Handle 'stop' or 'hold on' commands."""
-        # with Attention(is_for_assistant, "handle_stop_command()", self.logger):
-        if self.assistant_speaking:
+        if self.assistant_speaking or is_for_assistant:
             try:
-                self.logger.debug("[APP] <!> Assistant IS speaking, stopping ...")
-                self.assistant_speaking = False
                 self.speech_processor.stop_sound()
+                self.ball_reset_colorized()
+                self.speech_processor.wait(100)
+                self.logger.debug("[APP] <!> Assistant IS speaking, <STOPPING> ...")
                 self.logger.debug("[APP] (i) Saying a short confirmation ...")
-                self.read_unique(SHORT_CONFIRMS, speaking_color=self.SPEAKING, after_color=self.INITIAL, do_not_interrupt=True)
+                self.read_unique(SHORT_CONFIRMS, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+                self.assistant_speaking = False
                 self.logger.debug("[APP] (i) Speaking interrupted ...")
+                self.speech_processor.wait(1000)
             except Exception as e:
-                self.logger.debug(f"[APP] Error stopping: {e}, {traceback.format_exc()}")
+                self.logger.error(f"[APP] <!>  Error stopping: {e}, {traceback.format_exc()}")
             return
-        self.logger.debug("[APP] (i) Assistant IS NOT currently speaking, no reason to stop...")
+        self.logger.debug("[APP] (i) Assistant IS NOT currently speaking, <NO_REASON_TO_STOP> ...")
 
     def read_selected_text(self, is_for_assistant):
         """Read the selected text."""
@@ -394,14 +361,18 @@ class VoiceApp(QObject):
         """Exit the application gracefully."""
         with Attention(is_for_assistant, "exit_app()", self.logger):
             try:
-                self.logger.debug("[APP] Exiting the program...")
+                self.logger.debug("[APP] (i) Exiting the program...")
+                # Stop the speech recognition thread
+                self.stop_speech_recognition_thread()
+                # Finish any other cleanup tasks
                 self.read_unique(GOODBYES, do_not_interrupt=True)
                 self.speech_processor.wait(3000)
                 self.speech_processor.stop_sound(call_back=None)
                 self.emit_exit()
+                self.logger.debug("[APP] (i) Program exited cleanly.")
                 sys.exit(0)
             except Exception as e:
-                self.logger.debug(f"[APP] Error exiting: {e}, {e.__traceback__}")
+                self.logger.debug(f"[APP] (i) Error exiting: {e}, {e.__traceback__}")
 
     def read_unique(self, expression_list, speaking_color=None, after_color=None, do_not_interrupt=False):
         self.previous_expression = self.utils.get_unique_choice(expression_list, self.previous_expression)
@@ -423,7 +394,7 @@ class VoiceApp(QObject):
         response_iter = self.chat_assistant.get_response(history, spoken_prompt, lang=lang, context_free=context_free)
         # AI will generate the response ...
         self.logger_instance.pause()
-        print(f"[APP][AI_ASSISTANT][REAL_TIME_RESPONSE] >>>")
+        print(f"[APP][AI_ASSISTANT][REAL_TIME_RESPONSE] (*) >>>")
         # partial prompt results
         for partial_response in response_iter:
             response, diff = self._update_response(response, partial_response.replace("\n", ""), zoom=True)
@@ -436,8 +407,8 @@ class VoiceApp(QObject):
         # self.ball_reset_colorized()
         ai_response = self.utils.clean_response(response)
         self.logger_instance.resume()
-        self.logger.debug(f"[APP][AI_ASSISTANT] Response: {response}")
-        self.logger.debug(f"[APP][AI_ASSISTANT] Response cleaned: {ai_response}")
+        self.logger.debug(f"[APP][AI_ASSISTANT] (i) Response: {response}")
+        self.logger.debug(f"[APP][AI_ASSISTANT] (i) Response cleaned: {ai_response}")
         return ai_response
 
     def entertain(self, min_interval=2, max_interval=5):
@@ -515,27 +486,99 @@ class VoiceApp(QObject):
         """Stop pulsating the ball."""
         self.send_command_to_ball.emit("exit", {})
 
+    def start_speech_recognition_thread(self):
+        """Start the speech recognition thread."""
+        if self.speech_thread_running:
+            self.logger.debug("[APP] (i) Speech recognition thread is already running.")
+            return
+
+        self.speech_thread_running = True
+        self.speech_thread = threading.Thread(target=self.speech_recognition_task, daemon=True)
+        self.speech_thread.start()
+        self.logger.debug("[APP] (i) Speech recognition thread has started.")
+
+    def speech_recognition_task(self):
+        """The speech recognition loop that runs in its own thread."""
+        self.logger.debug("[APP] (i) Speech recognition task running.")
+        while self.speech_thread_running:
+            try:
+                spoken = self.speech_processor.recognize_speech()
+                if spoken:
+                    self.logger.debug(f"[APP][USER] (i) Recognized: \"{spoken}\"")
+                    self.recognized_speech_queue.put(spoken)
+                self.speech_processor.wait(100)
+            except Exception as e:
+                self.logger.error(f"[APP] <!> Error in speech recognition thread: {e}")
+        self.logger.debug("[APP] (i) Speech recognition task has stopped.")
+
+    def stop_speech_recognition_thread(self):
+        """Stop the speech recognition thread."""
+        if not self.speech_thread_running:
+            self.logger.debug("[APP] <!> Speech recognition thread is not running.")
+            return
+        self.speech_thread_running = False
+        if self.speech_thread:
+            self.speech_thread.join()
+            self.logger.debug("[APP] (i) Speech recognition thread has fully stopped.")
+
     def run(self):
-        """Run the main loop to listen for and process voice commands."""
+        """Main application loop to process recognized speech from the queue."""
         self.read_unique(HELLOS, speaking_color=self.HELLO, after_color=self.INITIAL, do_not_interrupt=True)
         self.speech_processor.wait(1000)
-        while True:
-            self.speech_processor.wait(10)
-            spoken = self.speech_processor.recognize_speech()
-            if self.utils.is_recog_glitch(spoken):
-                self.logger.debug(f"[APP] Glitch in speech recognition: {spoken}")
-                spoken = ""
-            if spoken:
-                self.logger.debug(f"[APP][USER] Spoken: \"{spoken}\"")
-                cleaned = spoken
-                self.process_command(spoken, cleaned)
-            else:
-                self.logger.debug("[APP] No speech recognized ...")
+        self.start_speech_recognition_thread()
+        try:
+            while True:
+                if not self.recognized_speech_queue.empty():
+
+                    spoken = self.recognized_speech_queue.get()
+                    self.logger.debug(f"[APP] (i) Processing speech from queue: \"{spoken}\"")
+                    clean = self.utils.clean_text(spoken)
+                    tokens = clean.split()
+                    prompt_is_valid = self.utils.is_prompt_valid(spoken, clean)
+
+                    # Check if prompt is a profanity / vulgarity
+                    if profanity.contains_profanity(spoken):
+                        self.logger.debug(f"[APP] <!> Profanity detected: {profanity.censor(spoken)}")
+                        self.read_unique(POLITE_RESPONSES, speaking_color=self.PROFANITY, after_color=self.INITIAL)
+                        continue
+
+                    # Check if Assistant name was mentioned
+                    addresses_assistant = self.is_for_assistant(spoken, clean)
+                    if addresses_assistant:
+                        self.logger.debug(f"[APP] (i) Prompt mentions AI Assistant name ...")
+                        spoken, clean = self.clean_name(spoken, clean)
+
+                    # Check for commands and execute commands
+                    is_command = self.process_command(spoken, clean, tokens, addresses_assistant)
+                    if is_command:
+                        self.logger.debug(f"[APP] (i) COMMAND detected in prompt {tokens} ...")
+                        continue
+
+                    # Process chat is no command was given, not in edit mode and prompt is valid
+                    if prompt_is_valid and not self.edit_mode_active and (self.chat_mode or addresses_assistant):
+                        self.process_chat(spoken, addresses_assistant)
+                        continue
+
+                    # Unclear prompts neither commands neither chats, respond only to longer valid prompts when not in editing mode
+                    self.logger.debug(f"[APP] <!> Prompt {tokens} is NOT VALID FOR CHAT and is NEITHER A COMMAND: {spoken}")
+                    if not self.assistant_speaking and len(tokens) > 1:
+                        self.read_unique(UNCLEAR_PROMPT_RESPONSES, speaking_color=self.UNCERTAIN, after_color=self.INITIAL)
+
+                # Add a slight delay to this loop to avoid high CPU usage
+                self.speech_processor.wait(100)
+
+        except KeyboardInterrupt:
+            # Trigger `exit_app` when exiting via keyboard
+            self.exit_app(is_for_assistant=True)
 
 
-# if __name__ == "__main__":
-#     app = VoiceUtilApp()
-#     app.run()
+@dataclass
+class SpeachStream:
+    spoken: str  # Source of the speech stream, e.g., "microphone" or "file"
+    language: str  # Language of the stream, e.g., "en-US"
+    transcription: str = ""  # Storage for the processed speech transcription
+    timestamp: float = 0.0  # Timestamp for the stream data
+    is_active: bool = False  # Status to indicate if the stream is currently active
 
 
 class VoiceUtilThread(threading.Thread):

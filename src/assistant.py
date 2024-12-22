@@ -1,14 +1,13 @@
+import traceback
 from datetime import datetime
 from threading import Thread, Lock
-import traceback
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.agents import Tool, ReactJsonAgent, HfApiEngine
 from transformers import TextIteratorStreamer
+from transformers.agents import Tool, ReactJsonAgent, HfApiEngine
+
 from app_logger import AppLogger
-from datetime import datetime
-
-
 
 
 class DateTimeTool(Tool):
@@ -24,10 +23,10 @@ class DateTimeTool(Tool):
 
     def forward(self) -> str:
         """Returns the current date and time."""
-        from pytz import timezone
         current_timestamp = f"The current time and date is {datetime.now().strftime('%I:%M %p, %A %B %d %Y')}."
         AppLogger().info(f"[DateTimeTool] Invoked - Generated timestamp: {current_timestamp}")
         return current_timestamp
+
 
 class PythonExecutionTool(Tool):
     name = "python-exec"
@@ -70,11 +69,10 @@ class ChatAssistant:
             "Avoid lists, tables, titles, or additional comments. "
             "Limit responses to direct answers, ensuring clarity and seamless assistance. "
             "Your responses should contain, NO italicized, NO bold, No enclosing in parentheses, NO lists, NO tables, NO backticks and NO markdown, NO titles, NO formatting and NO additional comments."
+            "When you don't understand a prompt or it does not make sense simply respond only with: <NOT_UNDERSTANDABLE!>",
         )
     }
     MODEL = "THUDM/glm-edge-1.5b-chat"
-    # MODEL = "THUDM/glm-4-9b-chat"
-    MODEL = "THUDM/GLM-Edge-4B-Chat"
 
     TOKEN = "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"
 
@@ -105,17 +103,22 @@ class ChatAssistant:
     def initialize_model(self, model_name, device_map, trust_remote_code):
         """Loads and configures the tokenizer and the model."""
         try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=self.TOKEN)
+            tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=self.TOKEN, trust_remote_code=True)
             self.logger.debug(f"[CHAT_ASSISTANT] Loading model to device: {self.device}")
-            model = AutoModelForCausalLM.from_pretrained(
+
+            model = (AutoModelForCausalLM.from_pretrained(
                 model_name,
-                device_map=device_map,
+                # device_map=device_map,
+                local_files_only=True,
+                device_map="balanced",
                 trust_remote_code=trust_remote_code,
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 revision="main"
-            ).to(self.device)
+            ).to(self.device))
+
             self.logger.debug("[CHAT_ASSISTANT] Optimizing model for inference...")
             model = torch.compile(model, mode="max-autotune")
+
             return tokenizer, model
         except Exception as e:
             self.logger.error(f"Error loading model '{model_name}': {e}, {traceback.format_exc()}")
@@ -127,7 +130,6 @@ class ChatAssistant:
         """Pre-warms the model to initialize CUDA kernels."""
         dummy_input = self.tokenizer("Warm-up round!", padding=True, return_tensors="pt").to(self.device)
         self.model.generate(**dummy_input)
-
 
     def preprocess_messages(self, history):
         """Converts history into the model's expected message format."""
@@ -149,7 +151,8 @@ class ChatAssistant:
         Returns the tool's response or a fallback message if no tools match.
         """
         tool_mapping = {
-            "datetime-tool": ["calendar date", "what time is it", "what time is now", "time now", "current time", "today's date", "date is today", "date now", "current date", "what date is now", "what's the date"]
+            "datetime-tool": ["calendar date", "what time is it", "what time is now", "time now", "current time", "today's date", "date is today", "date now", "current date",
+                              "what date is now", "what's the date"]
             # More tools to be added here in future
         }
 
@@ -233,5 +236,3 @@ class ChatAssistant:
                 yield generated_response
 
         return response_iterator() if return_iter else "".join(response_iterator())
-
-

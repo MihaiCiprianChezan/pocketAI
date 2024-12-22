@@ -7,6 +7,7 @@ from app_logger import AppLogger
 from varstore import GLITCHES, MULTIPLE_SPACES_REGEX
 import re
 
+
 class Utils:
 
     def __init__(self):
@@ -20,34 +21,35 @@ class Utils:
                 return True
         return False
 
-    @staticmethod
-    def is_prompt_valid(spoken, clean, min_tokens=3, min_chars=10, min_unique_tokens=3, vulgarities_list=None):
+    def is_prompt_valid(self, spoken, clean, min_tokens=3, min_chars=10, min_unique_tokens=3, vulgarities_list=None):
         """Check if a spoken prompt is valid based on multiple conditions."""
+        result = True
         if not clean.strip():
-            return False
+            result = False
         token_count = len(clean.split())
         if token_count < min_tokens:
-            return False
+            result = False
         char_count = len(clean)
         if char_count < min_chars:
-            return False
+            result = False
         if vulgarities_list:
             clean_lower = clean.lower()
             if any(word in clean_lower for word in vulgarities_list):
-                return False
+                result = False
         if spoken.isalpha() and len(set(spoken.lower())) <= 2:
-            return False
+            result = False
         tokens = clean.split()
         if len(set(tokens)) < min_unique_tokens:
-            return False
+            result = False
         most_common_token = max(set(tokens), key=tokens.count)
         if tokens.count(most_common_token) / token_count > 0.8:
-            return False
+            result = False
         if token_count == 1 and char_count > 20:
-            return False
+            result = False
         if clean.isdigit() or all(not c.isalnum() for c in clean):
-            return False
-        return True
+            result = False
+        self.logger.debug(f"[UTILS][is_prompt_valid()] (i) Prompt does not make sense for a chat ...")
+        return result
 
     @staticmethod
     def get_unique_choice(options, last_choice=None):

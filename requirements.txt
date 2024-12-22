@@ -17,7 +17,7 @@ whisper>=0.1.4
 transformers==4.47.1
 git+https://github.com/huggingface/transformers.git
 spaces==0.30.4
-accelerate==1.1.0
+accelerate==1.2.1
 
 # PyTorch + TorchAudio + TorchVision (CPU-only versions by default)
 # torch==2.0.1+cpu --index-url https://download.pytorch.org/whl/cpu
