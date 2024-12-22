@@ -23,11 +23,10 @@ class DateTimeTool(Tool):
     output_type = "string"
 
     def forward(self) -> str:
-        """Returns the current date and time with timezone as a string."""
-
+        """Returns the current date and time."""
         from pytz import timezone
         current_timestamp = f"The current time and date is {datetime.now().strftime('%I:%M %p, %A %B %d %Y')}."
-        AppLogger().info(f"[DateTimeTool] Generated timestamp: {current_timestamp}")
+        AppLogger().info(f"[DateTimeTool] Invoked - Generated timestamp: {current_timestamp}")
         return current_timestamp
 
 class PythonExecutionTool(Tool):
@@ -62,32 +61,20 @@ class ChatAssistant:
     SYSTEM_PROMPT = {
         "role": "system",
         "content": (
-            "You are Opti, a friendly AI assistant. "
-            "You have access to tools such as 'datetime-tool'. "
-            "For any time-related queries, use 'datetime-tool' exclusively. "
-            # Modified to allow broader time-query handling
-            "You should handle all time-related queries dynamically by detecting related intents."
-            "Enhance understanding of user prompts like 'what time is it' or 'tell me the date and time.'"
-            "You may directly call tools like 'datetime-tool' for accurate timestamps."
-            "Do NOT salute the user; respond with time directly without any prefix or suffix. "
-            "Use direct, concise, real-time timestamp for responses. "
-            "Provide concise, natural responses. "
-            "Limit your responses to less than 256 characters when possible. "
-            "Output only plain text in a single line. "
-            "NO lists, NO tables, NO backticks and NO markdown, NO titles, NO formatting and NO additional comments."
+            "You are Opti, a friendly AI assistant with access to specialized tools like 'datetime-tool' for handling time-related queries. You have access to real time information through those tools. "
+            "Use 'datetime-tool' exclusively for system-time or date-related queries by detecting related intents. "
+            "For all other prompts, respond as a general-purpose assistant using your training to generate appropriate answers. "
+            "Provide concise, natural responses . "
+            "Provide plain, natural responses with correct formatting, ideally under 256 characters when possible."
+            "Use plain text without any formatting, prefixes, or suffixes. "
+            "Avoid lists, tables, titles, or additional comments. "
+            "Limit responses to direct answers, ensuring clarity and seamless assistance. "
+            "Your responses should contain, NO italicized, NO bold, No enclosing in parentheses, NO lists, NO tables, NO backticks and NO markdown, NO titles, NO formatting and NO additional comments."
         )
     }
-
     MODEL = "THUDM/glm-edge-1.5b-chat"
-    # MODEL = "THUDM/glm-edge-4b-chat"
-
-    # MODEL = "HuggingFaceTB/SmolLM2-1.7B"
-    # MODEL = "rwkv/rwkv-raven-14b"
-    # MODEL = "facebook/MobileLLM-1.5B"
-    # MODEL = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    # MODEL = "facebook/opt-2.7b"
-    # MODEL = "meta-llama/Llama-2-7b-chat-hf"
-    # MODEL = "meta-llama/Llama-2-7b-chat"
+    # MODEL = "THUDM/glm-4-9b-chat"
+    MODEL = "THUDM/GLM-Edge-4B-Chat"
 
     TOKEN = "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"
 
@@ -156,6 +143,28 @@ class ChatAssistant:
         chat_messages.append(ChatAssistant.SYSTEM_PROMPT)
         return chat_messages
 
+    def tools_dispatcher(self, query: str) -> str:
+        """
+        Dispatches query to the relevant tool based on the intent.
+        Returns the tool's response or a fallback message if no tools match.
+        """
+        tool_mapping = {
+            "datetime-tool": ["calendar date", "what time is it", "what time is now", "time now", "current time", "today's date", "date is today", "date now", "current date", "what date is now", "what's the date"]
+            # More tools to be added here in future
+        }
+
+        # Match query with tool intents
+        for tool_name, intents in tool_mapping.items():
+            if any(intent in query.lower() for intent in intents):
+                # Find and invoke the matched tool
+                for tool in self.tools:
+                    if tool.name == tool_name:
+                        return tool.forward()
+
+        # return "I'm sorry, I cannot answer that."
+        # Fallback: No matching tools, handle query with default behavior (LLM)
+        return None  # Indicate no tool matched
+
     def predict(self, history, max_length=150, top_p=0.8, temperature=0.7):
         """Generates a prediction based on the conversation history."""
         chat_messages = self.preprocess_messages(history)
@@ -201,7 +210,8 @@ class ChatAssistant:
 
     def get_response(self, history, message, return_iter=True, lang="en", context_free=False):
         """
-        Generates a response based on the conversation history or a standalone task-specific prompt.
+        Generates a response based on the conversation history or dispatches a tool-based response dynamically.
+        If no tool matches, the query is processed by the LLM as a fallback.
         """
         if lang:
             pass  # TODO: Handle multilingual prompts in the future
@@ -210,6 +220,12 @@ class ChatAssistant:
         if not context_free:
             history.append([message, ""])
 
+        # Check for potential tool matches
+        tool_response = self.tools_dispatcher(message)
+        if tool_response:
+            return [tool_response]  # Return tool response directly
+
+        # Otherwise, fallback to the LLM for open-ended query handling
         def response_iterator():
             generated_response = ""
             for updated_history in self.predict(history):
@@ -217,3 +233,5 @@ class ChatAssistant:
                 yield generated_response
 
         return response_iterator() if return_iter else "".join(response_iterator())
+
+
