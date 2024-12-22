@@ -14,7 +14,7 @@ gTTS>=2.3.0
 # Whisper and HuggingFace integration
 openai-whisper~=20240930
 whisper>=0.1.4
-transformers>=4.27.0
+transformers==4.47.1
 git+https://github.com/huggingface/transformers.git
 spaces==0.30.4
 accelerate==1.1.0
