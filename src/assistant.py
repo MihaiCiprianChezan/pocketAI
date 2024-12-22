@@ -1,7 +1,7 @@
 import traceback
 from datetime import datetime
 from threading import Thread, Lock
-
+import wikipedia
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import TextIteratorStreamer
@@ -26,6 +26,40 @@ class DateTimeTool(Tool):
         current_timestamp = f"The current time and date is {datetime.now().strftime('%I:%M %p, %A %B %d %Y')}."
         AppLogger().info(f"[DateTimeTool] Invoked - Generated timestamp: {current_timestamp}")
         return current_timestamp
+
+class WikipediaTool(Tool):
+    name = "wikipedia-tool"
+    description = (
+        "Fetches summaries of topics or concepts from Wikipedia. "
+        "Use this tool for informational queries requiring general up to date knowledge. "
+        "Output should be concise and answer the query directly."
+    )
+
+    inputs = {
+        "query": {"type": "string", "description": "A topic or concept to search on Wikipedia."}
+    }
+    output_type = "string"
+
+    def forward(self, query: str) -> str:
+        """Fetches a concise Wikipedia summary for the given query."""
+        try:
+            # Fetch first 2 sentences of the result
+            summary = wikipedia.summary(query, sentences=2)
+            AppLogger().info(f"[WIKIPEDIA_TOOL] Searched for: {query}, Result: {summary}")
+            return summary
+        except wikipedia.exceptions.DisambiguationError as e:
+            # Handle ambiguous terms
+            return (
+                f"The query '{query}' is ambiguous. Here are some suggestions: {', '.join(e.options[:5])}. "
+                "Please specify further."
+            )
+        except wikipedia.exceptions.PageError:
+            # Handle cases where no results are found
+            return f"No page found on Wikipedia for '{query}'. Please try another query."
+        except Exception as e:
+            AppLogger().error(f"[WIKIPEDIA_TOOL] Error handling query '{query}': {repr(e)}")
+            return f"An unexpected error occurred while searching Wikipedia for '{query}'."
+
 
 
 class PythonExecutionTool(Tool):
@@ -72,6 +106,25 @@ class ChatAssistant:
             "When you don't understand a prompt or it does not make sense simply respond only with: <NOT_UNDERSTANDABLE!>",
         )
     }
+
+    # SYSTEM_PROMPT = {
+    #     "role": "system",
+    #     "content": (
+    #         "You are Opti, a friendly AI assistant with access to specialized tools like 'datetime-tool' for time/date queries and 'wikipedia-tool' for real-time informational queries. "
+    #         "You must decide when to use these tools to generate the most accurate and up-to-date responses. "
+    #         "If a query relates to the current date or time, use 'datetime-tool'. For general factual or real-world information beyond your training, use 'wikipedia-tool'. "
+    #         "Always check if a tool is relevant before crafting a response. "
+    #         "If tools do not provide the necessary information, rely on your training and knowledge for an appropriate response. "
+    #         "If neither your training nor tools can answer a question, respond with: <NOT_UNDERSTANDABLE!>. "
+    #         "Generate concise, natural responses below 256 characters when possible, avoiding unnecessary details or formatting. "
+    #         "Respond in plain text. Avoid formatting such as lists, tables, bold text, italicized text, markdown, or enclosing responses in any special symbols. "
+    #         "Present short answers for simple questions and summarize answers for longer or more complex queries. "
+    #         "Do not claim that your knowledge is outdated or that you cannot look up information if tools are available. Rely on the tools provided to retrieve missing or recent data. "
+    #         "Only say 'I do not have access to that information' if both your tools and training are unable to provide accurate information. "
+    #         "For illogical or nonsensical queries, respond with: <NOT_UNDERSTANDABLE!>."
+    #     )
+    # }
+
     MODEL = "THUDM/glm-edge-1.5b-chat"
 
     TOKEN = "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"
@@ -86,7 +139,8 @@ class ChatAssistant:
         # Define custom tools
         self.tools = [
             PythonExecutionTool(),
-            DateTimeTool()  # Add the new DateTimeTool here
+            DateTimeTool(),
+            # WikipediaTool(),
         ]
 
         # Initialize LLM Engine and Agent
@@ -152,7 +206,8 @@ class ChatAssistant:
         """
         tool_mapping = {
             "datetime-tool": ["calendar date", "what time is it", "what time is now", "time now", "current time", "today's date", "date is today", "date now", "current date",
-                              "what date is now", "what's the date"]
+                              "what date is now", "what's the date"],
+            "wikipedia-tool": ["explain", "what is", "meaning of", "search on wikipedia", "find on wikipedia", "who is", "what are"]
             # More tools to be added here in future
         }
 
@@ -162,8 +217,16 @@ class ChatAssistant:
                 # Find and invoke the matched tool
                 for tool in self.tools:
                     if tool.name == tool_name:
+                        if tool.name == "wikipedia-tool":
+                            self.logger.debug(f"Routing query to [WIKIPEDIA_TOOL] tool: {query}")
+                            cleaned_query = query.strip()
+                            result = tool.forward(cleaned_query)
+                            if result:
+                                self.logger.debug(f"[WIKIPEDIA_TOOL] tool <RESULT>: {result}")
+                                return result  # Return tool response directly if available
+                            else:
+                                self.logger.debug("[WIKIPEDIA_TOOL] tool returned <NO_RESULTS>.")
                         return tool.forward()
-
         # return "I'm sorry, I cannot answer that."
         # Fallback: No matching tools, handle query with default behavior (LLM)
         return None  # Indicate no tool matched
@@ -211,28 +274,33 @@ class ChatAssistant:
         t.join()
         return generated_response
 
-    def get_response(self, history, message, return_iter=True, lang="en", context_free=False):
+    def get_response(self, history, message, return_iter=True, lang="en", context_free=False, max_history_length=1):
         """
-        Generates a response based on the conversation history or dispatches a tool-based response dynamically.
-        If no tool matches, the query is processed by the LLM as a fallback.
+        Generates a response while managing the conversation history.
+        Automatically limits the history to the most recent interactions (up to max_history_length).
         """
         if lang:
-            pass  # TODO: Handle multilingual prompts in the future
+            pass  # TODO: Extend for multilingual support if needed
 
+        # Add the new message to the history
         history = history if not context_free else [[message, ""]]
         if not context_free:
             history.append([message, ""])
 
-        # Check for potential tool matches
+        # Limit the history length to the most recent interactions
+        history = history[-max_history_length:]  # Retain only the last N interactions
+
+        # Check for tool applicability first
         tool_response = self.tools_dispatcher(message)
         if tool_response:
-            return [tool_response]  # Return tool response directly
+            return [tool_response]  # Immediate tool resolution
 
-        # Otherwise, fallback to the LLM for open-ended query handling
+        # Fallback: Generate a response using the assistant's language model
         def response_iterator():
             generated_response = ""
             for updated_history in self.predict(history):
                 generated_response = updated_history[-1][1]
                 yield generated_response
 
-        return response_iterator() if return_iter else "".join(response_iterator())
+        fallback_response = "<NOT_UNDERSTANDABLE!>"  # Default fallback for invalid/unmatched queries
+        return response_iterator() if return_iter else fallback_response

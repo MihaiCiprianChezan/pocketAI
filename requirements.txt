@@ -34,3 +34,5 @@ torch~=2.5.1+cu121
 vosk~=0.3.45
 torch
 fastpunct~=2.0.2
+
+wikipedia==1.4.0

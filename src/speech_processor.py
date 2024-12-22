@@ -41,6 +41,7 @@ class SpeechProcessor:
         self.fastpunct = FastPunct()
         self.playback_thread = None
         self._initialize_mixer()
+        self.file_lock = threading.Lock()
         self.logger.debug(f"[SOUND_PROCESSOR] Using device: {device}")
         if self.use_vosk:
             # Vosk initialization
@@ -285,14 +286,16 @@ class SpeechProcessorTTSX3(SpeechProcessor):
                 if lang in self.SUPPORTED_LANGUAGES.keys():
                     if self.SUPPORTED_LANGUAGES[lang] != self.current_voice:
                         self.set_voice(self.SUPPORTED_LANGUAGES[lang])
-                self.engine.save_to_file(text, self.audio_output_file)
-                self.engine.runAndWait()
+                with self.file_lock:
+                    self.engine.save_to_file(text, self.audio_output_file)
+                    self.engine.runAndWait()
                 if lang in self.SUPPORTED_LANGUAGES.keys():
                     if self.SUPPORTED_LANGUAGES[lang] != self.current_voice:
                         self.set_voice(self.current_voice)
-            with open(self.audio_output_file, "rb") as file:
-                audio_data = file.read()
-            self.play_stream(audio_data, call_back=call_back, do_not_interrupt=do_not_interrupt)
+            with self.file_lock:
+                with open(self.audio_output_file, "rb") as file:
+                    audio_data = file.read()
+                self.play_stream(audio_data, call_back=call_back, do_not_interrupt=do_not_interrupt)
         except Exception as e:
             self.logger.debug(f"[SOUND_PROCESSOR] Error generating text-to-speech audio with pyttsx3: {e}, {traceback.format_exc()}")
 

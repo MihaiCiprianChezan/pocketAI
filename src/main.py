@@ -310,7 +310,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Please explain this: `{copied_text}`"
+            prompt = f"explain this, {copied_text}"
             ai_response = self.get_ai_response(prompt, lang=lang)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
@@ -322,7 +322,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Please summarize this: `{copied_text}`"
+            prompt = f"summarize this, {copied_text}"
             ai_response = self.get_ai_response(prompt, lang=lang)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
@@ -508,7 +508,8 @@ class VoiceApp(QObject):
                     self.recognized_speech_queue.put(spoken)
                 self.speech_processor.wait(100)
             except Exception as e:
-                self.logger.error(f"[APP] <!> Error in speech recognition thread: {e}")
+                self.logger.error(f"[APP] <!> Error in speech recognition thread: {e}, {traceback.format_exc()}")
+                self.speech_processor.wait(1000)
         self.logger.debug("[APP] (i) Speech recognition task has stopped.")
 
     def stop_speech_recognition_thread(self):
