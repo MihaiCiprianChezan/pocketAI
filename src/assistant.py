@@ -70,25 +70,23 @@ class ChatAssistant:
             "Enhance understanding of user prompts like 'what time is it' or 'tell me the date and time.'"
             "You may directly call tools like 'datetime-tool' for accurate timestamps."
             "Do NOT salute the user; respond with time directly without any prefix or suffix. "
-            "Use direct, concise, real-time timestamp for responses."
+            "Use direct, concise, real-time timestamp for responses. "
             "Provide concise, natural responses. "
             "Limit your responses to less than 256 characters when possible. "
-            "Output only plain text (NO lists, NO tables, NO backticks and NO markdown), in a single line, "
-            "without any formatting or additional comments."
+            "Output only plain text in a single line. "
+            "NO lists, NO tables, NO backticks and NO markdown, NO titles, NO formatting and NO additional comments."
         )
     }
+
     MODEL = "THUDM/glm-edge-1.5b-chat"
     # MODEL = "THUDM/glm-edge-4b-chat"
+
     # MODEL = "HuggingFaceTB/SmolLM2-1.7B"
-
     # MODEL = "rwkv/rwkv-raven-14b"
-
     # MODEL = "facebook/MobileLLM-1.5B"
     # MODEL = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-
     # MODEL = "facebook/opt-2.7b"
     # MODEL = "meta-llama/Llama-2-7b-chat-hf"
-
     # MODEL = "meta-llama/Llama-2-7b-chat"
 
     TOKEN = "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"
