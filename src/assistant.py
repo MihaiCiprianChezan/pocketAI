@@ -16,6 +16,7 @@ class DateTimeTool(Tool):
     description = (
         "Provides the current system time in the format 'HH:MM AM/PM, Day Month Date YYYY'. "
         "Ensure correctly formatted, dynamically generated timestamps for time queries."
+        "Output example: 'The current time and date is 08:32 AM, Sunday December 22 2024.'"
     )
 
     inputs = {}
@@ -25,7 +26,7 @@ class DateTimeTool(Tool):
         """Returns the current date and time with timezone as a string."""
 
         from pytz import timezone
-        current_timestamp = datetime.now().strftime("%I:%M %p, %A %B %d %Y")
+        current_timestamp = f"The current time and date is {datetime.now().strftime('%I:%M %p, %A %B %d %Y')}."
         AppLogger().info(f"[DateTimeTool] Generated timestamp: {current_timestamp}")
         return current_timestamp
 
@@ -76,16 +77,18 @@ class ChatAssistant:
             "without any formatting or additional comments."
         )
     }
-
     MODEL = "THUDM/glm-edge-1.5b-chat"
     # MODEL = "THUDM/glm-edge-4b-chat"
-
     # MODEL = "HuggingFaceTB/SmolLM2-1.7B"
+
     # MODEL = "rwkv/rwkv-raven-14b"
+
     # MODEL = "facebook/MobileLLM-1.5B"
     # MODEL = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
     # MODEL = "facebook/opt-2.7b"
     # MODEL = "meta-llama/Llama-2-7b-chat-hf"
+
     # MODEL = "meta-llama/Llama-2-7b-chat"
 
     TOKEN = "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"
@@ -132,7 +135,7 @@ class ChatAssistant:
         except Exception as e:
             self.logger.error(f"Error loading model '{model_name}': {e}, {traceback.format_exc()}")
             raise RuntimeError(
-                f"Failed to load model '{model_name}'. Verify availability or credentials for access."
+                f"Failed to load model '{model_name}'. Ensure the model exists and has the required files."
             )
 
     def prewarm_model(self):
@@ -140,22 +143,19 @@ class ChatAssistant:
         dummy_input = self.tokenizer("Warm-up round!", padding=True, return_tensors="pt").to(self.device)
         self.model.generate(**dummy_input)
 
-    @staticmethod
-    def preprocess_messages(history):
+
+    def preprocess_messages(self, history):
         """Converts history into the model's expected message format."""
         chat_messages = []
-        is_time_query = None
         for idx, (user_msg, model_msg) in enumerate(history):
             if idx == len(history) - 1 and not model_msg:
-                is_time_query = "time" in user_msg.lower() or "date" in user_msg.lower()
+                chat_messages.append({"role": "user", "content": user_msg})
                 break
             if user_msg:
                 chat_messages.append({"role": "user", "content": user_msg})
             if model_msg:
                 chat_messages.append({"role": "assistant", "content": model_msg})
-            if is_time_query:
-                chat_messages.append({"role": "tool", "content": "datetime-tool"})
-            return chat_messages
+        chat_messages.append(ChatAssistant.SYSTEM_PROMPT)
         return chat_messages
 
     def predict(self, history, max_length=150, top_p=0.8, temperature=0.7):
@@ -186,7 +186,7 @@ class ChatAssistant:
             try:
                 self.model.generate(**generate_kwargs)
             except Exception as e:
-                self.logger.error(f"[CHAT_ASSISTANT] Error during generation: {e}")
+                self.logger.debug(f"[CHAT_ASSISTANT] Error during generation: {e}")
 
         # Start text generation in a separate thread
         t = Thread(target=generate_in_thread)
@@ -196,10 +196,7 @@ class ChatAssistant:
             if new_token:
                 with self.history_lock:
                     history[-1][1] += new_token
-                generated_response += new_token
-                self.logger.info(f"[CHAT_ASSISTANT] Generated token: {new_token}")
-
-                self.logger.info(f"[CHAT_ASSISTANT] Updated history: {history}")
+                generated_response += new_token  # Append newly generated tokens
             yield history
         t.join()
         return generated_response
@@ -208,26 +205,17 @@ class ChatAssistant:
         """
         Generates a response based on the conversation history or a standalone task-specific prompt.
         """
-        is_time_query = "time" in message.lower() or "date" in message.lower()
-        if is_time_query:
-            message = "What time is it now?"
         if lang:
             pass  # TODO: Handle multilingual prompts in the future
 
         history = history if not context_free else [[message, ""]]
         if not context_free:
-            if not is_time_query:
-                history.append([message, ""])
+            history.append([message, ""])
 
         def response_iterator():
-            self.logger.info("[CHAT_ASSISTANT] Beginning response generation...")
-            is_time_query = any("time" in h[0].lower() or "date" in h[0].lower() for h in history)
             generated_response = ""
-            if is_time_query:
-                yield self.tools[1].forward()
-            else:
-                for updated_history in self.predict(history):
-                    generated_response = updated_history[-1][1]
-                    yield generated_response
+            for updated_history in self.predict(history):
+                generated_response = updated_history[-1][1]
+                yield generated_response
 
-        return response_iterator() if return_iter and not is_time_query else self.tools[1].forward()
+        return response_iterator() if return_iter else "".join(response_iterator())
