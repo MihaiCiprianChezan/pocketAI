@@ -14,13 +14,16 @@ class AppLogger:
             cls._instance._initialize(*args, **kwargs)
         return cls._instance
 
-    def __init__(self, file_name: str = "VoiceUtilApp.log", overwrite: bool = True, log_level: int = logging.DEBUG):
+    def __init__(self, file_name: str = "VoiceUtilApp.log", overwrite: bool = True, name="X-Logger",  log_level: int = logging.DEBUG):
         # Instance initialization only adds attributes once
         if not hasattr(self, "_initialized"):
             self._initialized = True
+            self.file_name = file_name
+            self.overwrite = overwrite
             self.log_level = log_level
+            self.name = name
 
-    def _initialize(self, file_name: str = "VoiceUtilApp.log", overwrite: bool = True, log_level: int = logging.DEBUG):
+    def _initialize(self, file_name: str = "VoiceUtilApp.log", overwrite: bool = True, name="X-Logger", log_level: int = logging.DEBUG):
         """
         Initialize a singleton-style shared logger instance.
 
@@ -29,7 +32,7 @@ class AppLogger:
             overwrite (bool): Overwrite existing log file if True.
             log_level (int): Initial log level (e.g., logging.DEBUG).
         """
-        self._logger = logging.getLogger("VoiceUtilLogger")
+        self._logger = logging.getLogger(name)
 
         # Prevent duplicate handlers
         if not self._logger.hasHandlers():
@@ -86,19 +89,19 @@ class AppLogger:
 
     # Convenience methods for commonly used log levels
     def info(self, message):
-        self.log(logging.INFO, message)
+        self.log(logging.INFO, f"(i) {message}")
 
     def debug(self, message):
-        self.log(logging.DEBUG, message)
+        self.log(logging.DEBUG, f"(D) {message}")
 
     def warning(self, message):
-        self.log(logging.WARNING, message)
+        self.log(logging.WARNING, f"<!> {message}")
 
     def error(self, message):
-        self.log(logging.ERROR, message)
+        self.log(logging.ERROR, f"<<!>> {message}")
 
     def critical(self, message):
-        self.log(logging.CRITICAL, message)
+        self.log(logging.CRITICAL, f"<<<!>>> {message}")
 
     def set_log_level(self, log_level: int):
         """

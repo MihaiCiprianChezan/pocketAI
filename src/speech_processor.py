@@ -1,13 +1,17 @@
 import io
 import json
 import logging
+import os
+import sys
 import threading
 import traceback
 import warnings
-
 import numpy as np
 import pyaudio
-import pygame
+with open(os.devnull, "w") as f:
+    sys.stdout = f
+    import pygame  # The Pygame module initializes here
+    sys.stdout = sys.__stdout__  # Restore stdout
 import pyttsx3
 import speech_recognition as sr
 import torch

@@ -48,7 +48,7 @@ class Utils:
             result = False
         if clean.isdigit() or all(not c.isalnum() for c in clean):
             result = False
-        self.logger.debug(f"[UTILS][is_prompt_valid()] (i) Prompt does not make sense for a chat ...")
+        self.logger.debug(f"[UTILS][is_prompt_valid()] Prompt does not make sense for a chat ...")
         return result
 
     @staticmethod
@@ -89,7 +89,7 @@ class Utils:
                     cleaned_text = cleaned_text[:last_punctuation + 1].strip()
         cleaned_text = cleaned_text.strip()
         if cut_part:
-            self.logger.debug(f"[UTILS] <!> Cleaned out incomplete part: {cut_part}")
+            self.logger.debug(f"[UTILS] Cleaned out incomplete part: {cut_part}")
         return cleaned_text
 
     @staticmethod

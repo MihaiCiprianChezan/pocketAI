@@ -7,6 +7,16 @@ from app_logger import AppLogger
 class DateTimeTool(Tool):
     name = "datetime-tool"
     target = "direct"
+    intents = [
+        "current time",
+        "what time is it",
+        "time now",
+        "current date",
+        "what date is it",
+        "date today",
+        "current date and time"
+    ]
+
     description = (
         "Provides the current system time in the format 'HH:MM AM/PM, Day Month Date YYYY'. "
         "Ensure correctly formatted, dynamically generated timestamps for time queries."
@@ -18,10 +28,6 @@ class DateTimeTool(Tool):
     }
 
     output_type = "string"
-
-    def __init__(self):
-        # Initialize any necessary attributes here
-        pass
 
     def forward(self, query):
         # Handle the query to provide the current date or time
@@ -40,6 +46,15 @@ class DateTimeTool(Tool):
 class WikipediaTool(Tool):
     name = "wikipedia-tool"
     target = "assistant"
+    intents = [
+        "find",
+        "what is",
+        "who is",
+        "define",
+        "search wikipedia",
+        "what are"
+    ]
+
     description = (
         "Fetches summaries of topics or concepts from Wikipedia. "
         "Use this tool for informational queries requiring general up to date knowledge. "
@@ -53,7 +68,7 @@ class WikipediaTool(Tool):
 
     def forward(self, q: str) -> str:
         """Fetches a concise Wikipedia summary for the given query."""
-        query = q[:300] # Wikipedia can handle max 300 chars in a query
+        query = q[:300]  # Wikipedia can handle max 300 chars in a query
         try:
             # Fetch first 2 sentences of the result
             summary = wikipedia.summary(query, sentences=2)
@@ -82,6 +97,10 @@ class WikipediaTool(Tool):
 class PythonExecutionTool(Tool):
     name = "python-exec"
     target = "assistant"
+    intents = [
+        "request to run a Python code snippet"
+    ]
+
     description = (
         "Executes Python code and returns the result. "
         "Use this tool only for simple Python snippets."
@@ -90,6 +109,7 @@ class PythonExecutionTool(Tool):
     inputs = {
         "code": {"type": "string", "description": "Python code to execute"},
     }
+
     output_type = "string"
 
     def forward(self, code: str) -> str:
