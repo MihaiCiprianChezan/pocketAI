@@ -1,23 +1,20 @@
+from dataclasses import dataclass
 import logging
+from queue import Queue
 import sys
 import threading
 import time
+from time import sleep
 import traceback
-
+from better_profanity import profanity
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
-from better_profanity import profanity
-
-from app_logger import AppLogger
-from assistant import ChatAssistant
+from assistant.assistant import ChatAssistant
 from atention import Attention
 from energy_ball import EnergyBall
 from speech_processor import SpeechProcessorTTSX3
 from utils import *
 from varstore import *
-from dataclasses import dataclass
-from time import sleep
-from queue import Queue
 
 
 class VoiceApp(QObject):
@@ -310,7 +307,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"explain this, {copied_text}"
+            prompt = f"Please explain this: `{copied_text}`"
             ai_response = self.get_ai_response(prompt, lang=lang)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
@@ -322,7 +319,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"summarize this, {copied_text}"
+            prompt = f"Please summarize this: `{copied_text}`"
             ai_response = self.get_ai_response(prompt, lang=lang)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
@@ -392,19 +389,32 @@ class VoiceApp(QObject):
         clean_history = []
         history = clean_history if context_free else self.history
         response_iter = self.chat_assistant.get_response(history, spoken_prompt, lang=lang, context_free=context_free)
+
         # AI will generate the response ...
         self.logger_instance.pause()
         print(f"[APP][AI_ASSISTANT][REAL_TIME_RESPONSE] (*) >>>")
+
         # partial prompt results
         for partial_response in response_iter:
+            # Handle cases where partial_response is not a string
+            if isinstance(partial_response, list):
+                # Convert list to a space-joined string
+                partial_response = " ".join(str(item) for item in partial_response)
+            elif not isinstance(partial_response, str):
+                # Fallback: Convert non-string types to a string
+                partial_response = str(partial_response)
+
+            # Process the string `partial_response`
             response, diff = self._update_response(response, partial_response.replace("\n", ""), zoom=True)
-            diff = diff.replace('\n', '')
+            diff = diff.replace("\n", "")
             print(f"{diff}", end="", flush=True)
-            # entertain periodically
+
+            # Entertain periodically
             if entertain and time.time() - last_update_time >= random_interval:
                 last_update_time, random_interval = self.entertain(last_update_time, random_interval)
+
         print(f"\n", flush=True)
-        # self.ball_reset_colorized()
+
         ai_response = self.utils.clean_response(response)
         self.logger_instance.resume()
         self.logger.debug(f"[APP][AI_ASSISTANT] (i) Response: {response}")
