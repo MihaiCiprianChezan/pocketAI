@@ -1,19 +1,22 @@
+from itertools import chain
 from threading import Lock, Thread
 import traceback
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 from transformers.agents import HfApiEngine, ReactJsonAgent
 from app_logger import AppLogger
+from assistant.intent import GENERIC_INTENTS, Intent
 from assistant.tools import DateTimeTool, PythonExecutionTool, WikipediaTool
-from assistant.intent import Intent, GENERIC_INTENTS
-from itertools import chain
+from pathlib import Path
+from utils import MODELS_DIR
 
-LLM_MODEL = "THUDM/glm-edge-1.5b-chat"
-HF_TOKEN = "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"
-
+LLM_MODEL = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")  # THUDM/glm-edge-1.5b-chat
+# HF_TOKEN = "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"
 
 class ChatAssistant:
-    BASE_SYSTEM_PROMPT = "You are Opti, an friendly AI assistant equipped with tools to handle specialized queries efficiently."
+    BASE_SYSTEM_PROMPT = ("You are Opti, an friendly AI assistant equipped with tools to handle specialized queries efficiently."
+                          "Provide direct concise, natural responses, ensuring clarity and seamless assistance."
+                          "Use one line plain text output WITHOUT any formatting, prefixes, suffixes, markup or decorations.")
 
     def __init__(self, model_name=LLM_MODEL, device_map="auto", trust_remote_code=True):
         self.history_lock = Lock()
@@ -40,24 +43,37 @@ class ChatAssistant:
         self.tokenizer, self.model = self.initialize_model(model_name, device_map, trust_remote_code)
         self.prewarm_model()
 
-    def initialize_model(self, model_name, device_map, trust_remote_code):
+    def initialize_model(self, model_name, device_map="auto", trust_remote_code=True, use_fp8=False):
         """Loads and configures the tokenizer and the model."""
         try:
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
-                use_auth_token=HF_TOKEN,
+                # use_auth_token=HF_TOKEN,
                 trust_remote_code=trust_remote_code,
+                use_fast=True,
                 legacy=False)
-            self.logger.debug(f"[CHAT_ASSISTANT] Loading model to device: {self.device}")
+            self.logger.debug(f"[CHAT_ASSISTANT] Loading model {model_name} to device: {self.device}")
+
+            # Determine precision (torch.float32, torch.float16, or torch.float8)
+            if use_fp8 and torch.cuda.is_available() and hasattr(torch.cuda, "is_fp8_supported") and torch.cuda.is_fp8_supported():
+                torch_dtype = torch.float8  # Use FP8 if supported
+                self.logger.info("[CHAT_ASSISTANT] Using float8 (FP8) precision for model inference.")
+            elif torch.cuda.is_available():
+                torch_dtype = torch.float16  # Otherwise, fall back to FP16 if GPU is available
+                self.logger.info("[CHAT_ASSISTANT] Using float16 (FP16) precision for model inference.")
+            else:
+                torch_dtype = torch.float32  # Default to FP32 on CPU
+                self.logger.info("[CHAT_ASSISTANT] Using float32 (FP32) precision on CPU.")
+
             model = (AutoModelForCausalLM.from_pretrained(
                 model_name,
-                # device_map=device_map,
+                device_map=device_map,
                 local_files_only=True,
-                device_map="balanced",
                 trust_remote_code=trust_remote_code,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                torch_dtype=torch_dtype,
                 revision="main",
             ).to(self.device))
+
             self.logger.debug("[CHAT_ASSISTANT] Optimizing model for inference...")
             model = torch.compile(model, mode="max-autotune")
             return tokenizer, model
@@ -68,9 +84,18 @@ class ChatAssistant:
             )
 
     def prewarm_model(self):
-        """Pre-warms the model to initialize CUDA kernels."""
-        dummy_input = self.tokenizer("Warm-up round!", padding=True, return_tensors="pt").to(self.device)
-        self.model.generate(**dummy_input)
+        """Pre-warms model for CUDA kernel initialization, skip if model not initialized."""
+        if self.model and self.tokenizer:
+            try:
+                dummy_input = self.tokenizer(
+                    "Warm-up round!", padding=True, return_tensors="pt"
+                ).to(self.device)
+                # Trigger CUDA kernel warming
+                self.model.generate(**dummy_input)
+            except Exception as e:
+                self.logger.debug(f"[CHAT_ASSISTANT] Prewarm error: {e}")
+        else:
+            self.logger.info("[CHAT_ASSISTANT] Prewarm skipped; model not loaded.")
 
     @staticmethod
     def preprocess_messages(history):
@@ -87,11 +112,13 @@ class ChatAssistant:
                 return tool
         return None  # No tool for the detected intent, will use internal training
 
-    def tools_dispatcher(self, query: str) -> list:
+    def tools_dispatcher(self, query: str) -> (list, str or None):
         """
         Handles query routing to the relevant tool. Returns response messages as a list of dicts.
         """
         # Get user intent from the message
+        result = []
+        target = None
         message_intent = self.intent.detect(query)
         self.logger.debug(f"[CHAT_ASSISTANT] Detected message intent `{message_intent}` ")
         # Get the appropriate tool for the detected intent (if any of the available tools is matching)
@@ -101,26 +128,17 @@ class ChatAssistant:
             # Get knowledge from tool
             tool_result = tool.forward(query)
             if tool_result:
+                target = tool.target
                 self.logger.debug(f"[CHAT_ASSISTANT] Tool [{tool.name}] result: `{tool_result}` for query: `{query}`")
-                if tool.target == 'direct':
-                    # Return tool results directly in format {"role": ..., "content": ...}
-                    return [
-                        {"role": "user", "content": query},
-                        {"role": "assistant", "content": tool_result}
-                    ]
-                elif tool.target == 'assistant':
-                    # Return response injected into assistant message
-                    assistant_response = f"{tool_result}"
-                    return [
-                        {"role": "user", "content": query},
-                        {"role": "assistant", "content": assistant_response}
-                    ]
+                result = [
+                    {"role": f"{tool.target}", "content": tool_result},
+                ]
             else:
                 self.logger.debug(f"[CHAT_ASSISTANT] No result from the tool [{tool.name}] found for query: `{query}`")
                 # Will use internal training data knowledge
         else:
             self.logger.debug(f"[CHAT_ASSISTANT] No tool found for message intent `{message_intent}`")
-        return []  # No relevant tool found, will use internal training data knowledge
+        return result, target
 
     @staticmethod
     def validate_history(history):
@@ -143,12 +161,10 @@ class ChatAssistant:
         """
         # Validate history structure before proceeding
         self.validate_history(history)
-        # Ensure that assistant's response is properly initialized
-        if not history or history[-1]["role"] != "assistant":
-            history.append({"role": "assistant", "content": ""})
         # Preprocess chat messages for the model
         chat_messages = self.preprocess_messages(history)
         # Model input preparation
+        self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> <chat_messages> is: {chat_messages}")
         model_inputs = self.tokenizer.apply_chat_template(
             chat_messages,
             add_generation_prompt=True,
@@ -156,6 +172,7 @@ class ChatAssistant:
             return_tensors="pt",
             return_dict=True
         ).to(self.device)
+        self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> <model_inputs> is: {model_inputs}")
         # Set up TextIteratorStreamer for streaming tokens
         streamer = TextIteratorStreamer(self.tokenizer, timeout=60, skip_prompt=True, skip_special_tokens=True)
         generate_kwargs = {
@@ -171,7 +188,6 @@ class ChatAssistant:
         }
         # Initialize cumulative response for appending tokens
         cumulative_response = ""
-
         # Launch the generation in a thread to avoid blocking
         def generate_in_thread():
             try:
@@ -182,10 +198,12 @@ class ChatAssistant:
         t = Thread(target=generate_in_thread)
         t.start()
         # Read tokens from the streamer and build the response incrementally
+        response_parts = []
         for new_token in streamer:
             if new_token:
                 with self.history_lock:
-                    cumulative_response += new_token  # Accumulate tokens
+                    response_parts.append(new_token)
+                    cumulative_response = "".join(response_parts)   # Accumulate tokens
                     history[-1]["content"] = cumulative_response  # Update assistant's content in history
                 # Validate history after each token for correctness
                 self.validate_history(history)
@@ -221,36 +239,41 @@ class ChatAssistant:
 
     def get_response(self, history, message, return_iter=True, lang="en", context_free=False, max_history_length=5):
         """
-        Handles user queries, processes tool-based responses, and formats normal prompts.
-        Ensures clean, non-repeating outputs.
+        Handles user queries by focusing on the latest prompt first.
         """
-        # Add user message to history
-        history.append({"role": "user", "content": message})
-        # Limit history to max length
+        self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> History before: {history}")
+
         history = history[-max_history_length:]
 
-        # Handle tool responses
-        tool_response = self.tools_dispatcher(message)
+        # Check for detected tools or actions
+        tool_response, tool_target = self.tools_dispatcher(message)
         if tool_response:
-            history.extend(tool_response)
-            # Format tool response into clean text
-            formatted_response = tool_response[-1]["content"]  # Use only the assistant's response
-            return formatted_response if not return_iter else iter([formatted_response])
+            if tool_target == 'direct':
+                return tool_response[0]["content"]
 
-        # For normal prompts, proceed to prediction
+
+            history = [entry for entry in tool_response]
+            self.logger.debug(f"[CHAT_ASSISTANT] Tool response handled with context_free={context_free}.")
+        else:
+            if not isinstance(message, dict):
+                message = {"role": "user", "content": str(message)}
+                history.append(message)
+
+        self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> History is: {history}")
+
+        # For normal prompts, use prediction (model response)
         def response_iterator():
-            for updated_history in self.predict(history):
-                # Ensure updated_history[-1] is valid and contains content
-                if isinstance(updated_history[-1], dict) and "content" in updated_history[-1]:
-                    assistant_content = updated_history[-1]["content"]
-                elif isinstance(updated_history[-1], str):  # Fix if response is mistakenly a string
-                    updated_history[-1] = {"role": "assistant", "content": updated_history[-1]}
-                    assistant_content = updated_history[-1]["content"]
-                else:
-                    raise TypeError(f"Invalid response format: {type(updated_history[-1])} - {updated_history[-1]}")
-                # Cleanup any residual user prompt in the assistant response
-                if assistant_content.startswith("User:"):
-                    assistant_content = assistant_content.split("Assistant:", 1)[-1].strip()
+            """
+            Handles history or context-free LLM invocation based on `context_free`.
+            """
+            # Decide what to send to the LLM
+            # active_history = [history[-1]] if context_free else history  # Only use the latest message if context-free
+            active_history = history
+            self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> Sending to LLM: {self.format_history_for_output(active_history)}")
+            for updated_history in self.predict(active_history):
+                # Extract LLM output from predictions
+                assistant_content = updated_history[-1]["content"] if "content" in updated_history[-1] else "<NO_RESPONSE>"
                 yield assistant_content
 
         return response_iterator() if return_iter else "<NOT_UNDERSTANDABLE!>"
+

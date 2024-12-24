@@ -1,15 +1,23 @@
+from dataclasses import dataclass
 import traceback
 from transformers import pipeline
-from dataclasses import dataclass
 from app_logger import AppLogger
+from utils import MODELS_DIR
 
-DEFAULT_MODEL_NAME = "cross-encoder/nli-distilroberta-base"  # Introduced constant
-GENERIC_INTENTS = ["unknown intent", "general query", "general inquiry", "help request"]
+DEFAULT_MODEL_NAME = str(MODELS_DIR / "cross-encoder-nli-distilroberta-base")  # cross-encoder/nli-distilroberta-base
+GENERIC_INTENTS = [
+    "unknown intent",
+    "general request",
+    # "help request"
+    "summarize text",
+    "translate text"
+]
 
 @dataclass
 class DetectionResult:
     label: str
     score: float
+
 
 class Intent:
     def __init__(self, labels=None, model_name=DEFAULT_MODEL_NAME):

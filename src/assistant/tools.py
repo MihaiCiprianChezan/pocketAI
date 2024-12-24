@@ -9,10 +9,10 @@ class DateTimeTool(Tool):
     target = "direct"
     intents = [
         "current time",
-        "what time is it",
+        "what time",
         "time now",
         "current date",
-        "what date is it",
+        "what date",
         "date today",
         "current date and time"
     ]
