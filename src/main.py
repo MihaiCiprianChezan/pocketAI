@@ -611,7 +611,7 @@ class VoiceUtilThread(threading.Thread):
 
 def main():
     app = QApplication(sys.argv)
-    energy_ball = EnergyBall("images/opti100.gif")
+    energy_ball = EnergyBall()
     energy_ball.show()
     voice_util_app = VoiceApp()
     voice_thread = VoiceUtilThread(voice_util_app)

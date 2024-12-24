@@ -206,12 +206,19 @@ class EnergyBall(QWidget):
         animation.start()
 
     def paintEvent(self, event):
+        """
+        Ensure the circle remains smoothly centered on the widget and proportional to the ball.
+        """
+        # Draw the circle
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setBrush(self.circle_color)
         painter.setPen(Qt.NoPen)
-        radius = max(self.width() - 20, self.height() - 20) // 2
-        painter.drawEllipse(self.rect().center(), radius, radius)
+
+        # Always draw the circle centered in the widget
+        widget_center = self.rect().center()
+        radius = round(max(self.label.width(), self.label.height()) // 2.2)  # Circle matches ball size + padding
+        painter.drawEllipse(widget_center.x() - radius, widget_center.y() - radius, 2 * radius, 2 * radius)
 
     def mousePressEvent(self, event: QMouseEvent):
         """
@@ -257,33 +264,43 @@ class EnergyBall(QWidget):
     def zoom_effect(self, duration=100, zoom_factor=1.1):
         """
         Creates an animated zoom-in and zoom-out effect by scaling the QMovie and QLabel.
+        This ensures the ball zooms relative to its center only and avoids conflicts with pulsating.
         """
         original_width, original_height = self.original_size
         zoomed_width = int(original_width * zoom_factor)
         zoomed_height = int(original_height * zoom_factor)
-        # Create the animation for the zoom effect
-        animation = QVariantAnimation(self)
-        animation.setStartValue(QSize(original_width, original_height))  # Start at original size
-        animation.setEndValue(QSize(zoomed_width, zoomed_height))  # End at zoomed size
-        animation.setDuration(duration)  # Duration of 1 second
 
-        # Handle value changes during the animation
+        # Centering is calculated only once, not during every frame
+        delta_width = (zoomed_width - original_width) // 2
+        delta_height = (zoomed_height - original_height) // 2
+
+        # Create the zoom animation
+        animation = QVariantAnimation(self)
+        animation.setStartValue(QSize(original_width, original_height))
+        animation.setEndValue(QSize(zoomed_width, zoomed_height))
+        animation.setDuration(duration)
+
         def resize_frames(size):
             self.movie.setScaledSize(size)
+            self.label.resize(size)
 
-        # Connect animation changes to the resize logic
+        # Update the widget size (but avoid rapidly changing position)
         animation.valueChanged.connect(resize_frames)
 
-        # Reverse the animation after 1 second
+        # Reverse Zoom
         def reverse_zoom():
             reverse_animation = QVariantAnimation(self)
             reverse_animation.setStartValue(QSize(zoomed_width, zoomed_height))
             reverse_animation.setEndValue(QSize(original_width, original_height))
-            reverse_animation.setDuration(duration)  # Reverse duration of 1 second
-            reverse_animation.valueChanged.connect(resize_frames)
+            reverse_animation.setDuration(duration)
+
+            def reverse_resize(size):
+                self.movie.setScaledSize(size)
+                self.label.resize(size)
+
+            reverse_animation.valueChanged.connect(reverse_resize)
             reverse_animation.start()
 
-        # Trigger the reverse animation after finishing the first one
         animation.finished.connect(reverse_zoom)
         animation.start()
 
