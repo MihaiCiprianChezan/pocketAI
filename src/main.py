@@ -333,7 +333,7 @@ class VoiceApp(QObject):
             copied_text = pyperclip.paste()
             language = LANGUAGES[lang]
             self.logger.debug(f"[APP] [Translating to {lang}:language] of: {copied_text}")
-            prompt = f"Translate the following text into {language}. Output only the plain translation, in a single line, without any formatting or additional comments: `{copied_text}`"
+            prompt = f"Translate `{copied_text}` to {language} language. Output only the plain translation, in a single line, without any formatting or additional comments."
             self.logger.debug(f"[APP] [Translation prompt]: {prompt}")
             ai_response = self.get_ai_response(prompt, lang=lang, context_free=True)
             self.agent_speak(ai_response, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL, lang=lang)
@@ -346,7 +346,7 @@ class VoiceApp(QObject):
             copied_text = pyperclip.paste()
             language = LANGUAGES[lang]
             self.logger.debug(f"[APP] [Editor, translating to {lang}:language] of: {copied_text}")
-            prompt = f"Translate the following text into {language}. Output only the plain translation, in a single line, without any formatting or additional comments: `{copied_text}`"
+            prompt = f"Translate `{copied_text}` to {language} language. Output only the plain translation, in a single line, without any formatting or additional comments."
             self.logger.debug(f"[APP] [Editor, translation prompt]: {prompt}")
             ai_response = self.get_ai_response(prompt, lang=lang)
             keyboard.send("end")
