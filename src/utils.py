@@ -1,13 +1,15 @@
-import random
 from pathlib import Path
+import random
+import re
+
 import keyboard
 import pyperclip
 
 from app_logger import AppLogger
 from varstore import GLITCHES, MULTIPLE_SPACES_REGEX
-import re
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
+
 
 class Utils:
 

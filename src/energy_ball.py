@@ -1,14 +1,9 @@
 import random
 import sys
 
-from PySide6.QtCore import QSize, QVariantAnimation, QTimer, QCoreApplication
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QMouseEvent, QAction
-from PySide6.QtGui import QMovie
-from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget, QMessageBox
-from PySide6.QtWidgets import QGraphicsColorizeEffect
-from PySide6.QtWidgets import QMenu
+from PySide6.QtCore import QCoreApplication, QMutex, QMutexLocker, QSize, Qt, QTimer, QVariantAnimation
+from PySide6.QtGui import QAction, QColor, QMouseEvent, QMovie, QPainter
+from PySide6.QtWidgets import QApplication, QGraphicsColorizeEffect, QLabel, QMenu, QMessageBox, QVBoxLayout, QWidget
 
 from app_logger import AppLogger
 
@@ -31,6 +26,7 @@ class EnergyBall(QWidget):
         self.label = QLabel(self)
         self.label.setAttribute(Qt.WA_TranslucentBackground, True)
         self.label.setMovie(self.movie)
+        # self.label.hide()
         layout = QVBoxLayout()
         layout.addWidget(self.label)
         self.setLayout(layout)
@@ -38,6 +34,9 @@ class EnergyBall(QWidget):
         self.offset = None
         self.current_color = QColor(0, 0, 0)  # Keeps the current overlay color
         self.is_dragging = False  # Initialize dragging state
+        self.color_effect = None
+        self.color_animation = None
+        self.animation_lock = QMutex()
         # Initialize position
         self.init_position()
 
@@ -107,31 +106,64 @@ class EnergyBall(QWidget):
     def set_colorized(self, target_color: QColor, duration=500):
         """
         Smoothly transitions the label from fully transparent to the target color.
+        Handles calls from multiple threads safely.
         """
-        color_effect = QGraphicsColorizeEffect(self)
-        color_effect.setColor(target_color)
-        self.label.setGraphicsEffect(color_effect)
-        animation = QVariantAnimation(self)
-        animation.setStartValue(0.0)  # Start fully transparent
-        animation.setEndValue(1.0)  # End fully opaque
-        animation.setDuration(duration)
-        def update_strength(strength):
-            color_effect.setStrength(strength)  # Adjust visibility of the overlay
-        animation.valueChanged.connect(update_strength)
-        def on_animation_complete():
-            self.logger.debug(f"[DEBUG] Transition to {target_color} complete.")
-        animation.finished.connect(on_animation_complete)
-        animation.start()
+        with QMutexLocker(self.animation_lock):  # Lock the mutex
+            # Remove any existing effect to avoid conflicts
+            existing_effect = self.label.graphicsEffect()
+            if existing_effect:
+                self.label.setGraphicsEffect(None)
 
-    def apply_color(self, color: QColor):
-        """
-        Update the color overlay dynamically during the animation.
-        """
-        self.current_color = color
-        # Apply the color overlay effect
-        color_effect = QGraphicsColorizeEffect(self)
-        color_effect.setColor(color)
-        self.label.setGraphicsEffect(color_effect)
+                # Safely delete the existing effect
+                if isinstance(existing_effect, QGraphicsColorizeEffect):
+                    try:
+                        existing_effect.deleteLater()
+                    except RuntimeError:
+                        # Skip deletion if the object was already deleted
+                        self.logger.warning("[WARNING] Attempted to delete an already-deleted QGraphicsColorizeEffect.")
+
+            # If an animation is already running, stop it
+            if hasattr(self, 'color_animation') and self.color_animation is not None:
+                self.color_animation.stop()
+                try:
+                    self.color_animation.deleteLater()
+                except RuntimeError:
+                    self.logger.warning("[WARNING] Attempted to delete an already-deleted QVariantAnimation.")
+                self.color_animation = None
+
+            # Create a local graphics effect (not stored in `self`)
+            color_effect = QGraphicsColorizeEffect(self)
+            color_effect.setColor(target_color)
+            self.label.setGraphicsEffect(color_effect)
+
+            # Create a new animation
+            self.color_animation = QVariantAnimation(self)
+            self.color_animation.setStartValue(0.0)
+            self.color_animation.setEndValue(1.0)
+            self.color_animation.setDuration(duration)
+
+            # Update the effect's strength during animation
+            def update_strength(strength):
+                if color_effect:  # Check if color_effect still exists
+                    try:
+                        color_effect.setStrength(strength)
+                    except RuntimeError:
+                        self.logger.debug("[DEBUG] QGraphicsColorizeEffect already deleted during animation.")
+
+            self.color_animation.valueChanged.connect(update_strength)
+
+            # Debugging info for when the animation completes
+            def on_animation_complete():
+                if color_effect:
+                    try:
+                        self.logger.debug(f"[DEBUG] Transition to {target_color} complete.")
+                    except RuntimeError:
+                        self.logger.debug("[DEBUG] QGraphicsColorizeEffect already deleted at animation completion.")
+
+            self.color_animation.finished.connect(on_animation_complete)
+
+            # Start the animation
+            self.color_animation.start()
 
     def reset_color(self):
         """
@@ -151,6 +183,7 @@ class EnergyBall(QWidget):
         animation.setStartValue(1.0)  # Full strength of the effect
         animation.setEndValue(0.0)  # No effect (reset state)
         animation.setDuration(duration)  # Duration in milliseconds
+
         def fade_out_effect(opacity):
             # Validate opacity
             if not (0.0 <= opacity <= 1.0):
@@ -167,6 +200,7 @@ class EnergyBall(QWidget):
                 if opacity == 0.0:
                     # Optionally remove the effect when faded out
                     self.label.setGraphicsEffect(None)
+
         # Connect the animation's valueChanged signal to dynamically update the effect
         animation.valueChanged.connect(fade_out_effect)
         animation.start()
@@ -232,11 +266,14 @@ class EnergyBall(QWidget):
         animation.setStartValue(QSize(original_width, original_height))  # Start at original size
         animation.setEndValue(QSize(zoomed_width, zoomed_height))  # End at zoomed size
         animation.setDuration(duration)  # Duration of 1 second
+
         # Handle value changes during the animation
         def resize_frames(size):
             self.movie.setScaledSize(size)
+
         # Connect animation changes to the resize logic
         animation.valueChanged.connect(resize_frames)
+
         # Reverse the animation after 1 second
         def reverse_zoom():
             reverse_animation = QVariantAnimation(self)
@@ -267,6 +304,7 @@ class EnergyBall(QWidget):
         # Create a timer for random intervals
         if not hasattr(self, "pulse_timer"):
             self.pulse_timer = QTimer(self)
+
         # Define the pulsate animation logic
         def single_pulse(zoom_factor=1.03, duration=1000):
             if not self.pulsating:  # Stop if pulsating was toggled off
@@ -279,18 +317,22 @@ class EnergyBall(QWidget):
             animation.setStartValue(QSize(original_width, original_height))  # Start at original size
             animation.setEndValue(QSize(zoomed_width, zoomed_height))  # End at zoomed size
             animation.setDuration(duration)  # Duration of each pulse (grow-shrink cycle)
+
             def resize_frames(size):
                 self.movie.setScaledSize(size)  # Resize the QMovie dynamically
+
             animation.valueChanged.connect(resize_frames)
             # Reverse animation logic after the animation ends
             animation.finished.connect(lambda: resize_frames(QSize(original_width, original_height)))
             animation.start()
+
         # Schedule the next pulse with random intervals
         def schedule_next_pulse(rand_a=100, rand_b=1000):
             if self.pulsating:  # Continue pulsating
                 single_pulse()
                 random_delay = random.randint(rand_a, rand_b)  # Add a random delay (500ms to 1000ms)
                 self.pulse_timer.start(random_delay)
+
         # Connect the timer timeout to the schedule function
         self.pulse_timer.timeout.connect(schedule_next_pulse)
         # Trigger the first pulse immediately
@@ -330,6 +372,7 @@ class EnergyBall(QWidget):
         elif event.key() == Qt.Key_Escape:  # Exit
             self.close()
             QCoreApplication.quit()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

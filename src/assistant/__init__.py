@@ -1,1 +1,1 @@
-from .assistant  import ChatAssistant
+from .assistant import ChatAssistant

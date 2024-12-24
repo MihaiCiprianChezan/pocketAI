@@ -1,7 +1,5 @@
 import logging
 
-from PySide6.scripts.project import Singleton
-
 
 class AppLogger:
     _instance = None  # Singleton instance
@@ -14,7 +12,7 @@ class AppLogger:
             cls._instance._initialize(*args, **kwargs)
         return cls._instance
 
-    def __init__(self, file_name: str = "VoiceUtilApp.log", overwrite: bool = True, name="X-Logger",  log_level: int = logging.DEBUG):
+    def __init__(self, file_name: str = "VoiceUtilApp.log", overwrite: bool = True, name="X-Logger", log_level: int = logging.DEBUG):
         # Instance initialization only adds attributes once
         if not hasattr(self, "_initialized"):
             self._initialized = True

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import traceback
+
 from transformers import pipeline
+
 from app_logger import AppLogger
 from utils import MODELS_DIR
 
@@ -12,6 +14,7 @@ GENERIC_INTENTS = [
     "summarize request",
     "translate request",
 ]
+
 
 @dataclass
 class DetectionResult:

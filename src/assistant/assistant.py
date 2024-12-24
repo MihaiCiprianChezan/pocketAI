@@ -1,16 +1,19 @@
 from itertools import chain
 from threading import Lock, Thread
 import traceback
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 from transformers.agents import HfApiEngine, ReactJsonAgent
+
 from app_logger import AppLogger
 from assistant.intent import GENERIC_INTENTS, Intent
 from assistant.tools import DateTimeTool, PythonExecutionTool, WikipediaTool
-from pathlib import Path
 from utils import MODELS_DIR
 
 LLM_MODEL = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")  # THUDM/glm-edge-1.5b-chat
+
+
 # HF_TOKEN = "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"
 
 class ChatAssistant:
@@ -188,6 +191,7 @@ class ChatAssistant:
         }
         # Initialize cumulative response for appending tokens
         cumulative_response = ""
+
         # Launch the generation in a thread to avoid blocking
         def generate_in_thread():
             try:
@@ -203,7 +207,7 @@ class ChatAssistant:
             if new_token:
                 with self.history_lock:
                     response_parts.append(new_token)
-                    cumulative_response = "".join(response_parts)   # Accumulate tokens
+                    cumulative_response = "".join(response_parts)  # Accumulate tokens
                     history[-1]["content"] = cumulative_response  # Update assistant's content in history
                 # Validate history after each token for correctness
                 self.validate_history(history)
@@ -251,7 +255,6 @@ class ChatAssistant:
             if tool_target == 'direct':
                 return tool_response[0]["content"]
 
-
             history = [entry for entry in tool_response]
             self.logger.debug(f"[CHAT_ASSISTANT] Tool response handled with context_free={context_free}.")
         else:
@@ -276,4 +279,3 @@ class ChatAssistant:
                 yield assistant_content
 
         return response_iterator() if return_iter else "<NOT_UNDERSTANDABLE!>"
-

@@ -6,9 +6,11 @@ import threading
 import time
 from time import sleep
 import traceback
+
 from better_profanity import profanity
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
+
 from assistant.assistant import ChatAssistant
 from atention import Attention
 from energy_ball import EnergyBall
@@ -35,7 +37,7 @@ class VoiceApp(QObject):
     def __init__(self):
         super().__init__()
         self.logger_instance = AppLogger(file_name="VoiceUtilApp.log", overwrite=True, log_level=logging.DEBUG)
-        self.logger =self.logger_instance
+        self.logger = self.logger_instance
         # self.logger = self.logger_instance.get_logger()
         self.speech_processor = SpeechProcessorTTSX3()
         self.chat_assistant = ChatAssistant()
