@@ -30,6 +30,7 @@ class VoiceApp(QObject):
     PROFANITY = RED
     UNCERTAIN = ORANGE
     PAUSED = LIGHT_GREY
+    TRANSLATE = CYAN
 
     def __init__(self):
         super().__init__()
@@ -337,7 +338,7 @@ class VoiceApp(QObject):
             prompt = f"Translate `{copied_text}` to {language} language. Output only the plain translation, in a single line, without any formatting or additional comments."
             self.logger.debug(f"[APP] [Translation prompt]: {prompt}")
             ai_response = self.get_ai_response(prompt, lang=lang, context_free=True)
-            self.agent_speak(ai_response, speaking_color=self.OPERATING_TEXT, after_color=self.INITIAL, lang=lang)
+            self.agent_speak(ai_response, speaking_color=self.TRANSLATE, after_color=self.INITIAL, lang=lang)
 
     def edit_translate_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""

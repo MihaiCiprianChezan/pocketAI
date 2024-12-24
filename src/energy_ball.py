@@ -17,7 +17,7 @@ class EnergyBall(QWidget):
     def __init__(self, gif_path="./images/opti100.gif"):
         super().__init__()
         self.logger = AppLogger()
-        self.circle_color = QColor(0, 0, 0, 80)
+        self.circle_color = QColor(0, 0, 0, 180)
         # Configure the transparent, frameless overlay window
         self.pulsating = None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -105,21 +105,27 @@ class EnergyBall(QWidget):
         self.move(screen_width - widget_width - padding, screen_height - widget_height - padding)
 
     def set_colorized(self, target_color: QColor, duration=500):
-        if self.current_color == target_color or self.current_color is None:
-            self.label.setGraphicsEffect(None)
-            self.current_color = QColor(None)
+        """
+        Smoothly transitions the label from fully transparent to the target color.
+        """
+        color_effect = QGraphicsColorizeEffect(self)
+        color_effect.setColor(target_color)
+        self.label.setGraphicsEffect(color_effect)
         animation = QVariantAnimation(self)
-        animation.setStartValue(self.current_color)
-        animation.setEndValue(target_color)
+        animation.setStartValue(0.0)  # Start fully transparent
+        animation.setEndValue(1.0)  # End fully opaque
         animation.setDuration(duration)
-        animation.valueChanged.connect(self.apply_color)
-        # animation.finished.connect(lambda: self.logger.debug(f"[DEBUG] Transition complete to {target_color}"))
+        def update_strength(strength):
+            color_effect.setStrength(strength)  # Adjust visibility of the overlay
+        animation.valueChanged.connect(update_strength)
+        def on_animation_complete():
+            self.logger.debug(f"[DEBUG] Transition to {target_color} complete.")
+        animation.finished.connect(on_animation_complete)
         animation.start()
 
     def apply_color(self, color: QColor):
         """
         Update the color overlay dynamically during the animation.
-        :param color: QColor to apply during the transition.
         """
         self.current_color = color
         # Apply the color overlay effect
@@ -145,28 +151,22 @@ class EnergyBall(QWidget):
         animation.setStartValue(1.0)  # Full strength of the effect
         animation.setEndValue(0.0)  # No effect (reset state)
         animation.setDuration(duration)  # Duration in milliseconds
-
-
         def fade_out_effect(opacity):
             # Validate opacity
             if not (0.0 <= opacity <= 1.0):
                 raise ValueError("Opacity must be between 0.0 and 1.0")
-
             if self.label is None:
                 raise AttributeError("Label is not set.")
-
             effect = self.label.graphicsEffect()
             if effect is None:
                 # Apply a new graphics effect if one does not exist
                 effect = QGraphicsColorizeEffect()
                 self.label.setGraphicsEffect(effect)
-
             if isinstance(effect, QGraphicsColorizeEffect):
                 effect.setStrength(opacity)
                 if opacity == 0.0:
                     # Optionally remove the effect when faded out
                     self.label.setGraphicsEffect(None)
-
         # Connect the animation's valueChanged signal to dynamically update the effect
         animation.valueChanged.connect(fade_out_effect)
         animation.start()
@@ -217,7 +217,6 @@ class EnergyBall(QWidget):
             )
             if reply == QMessageBox.Yes:
                 QApplication.quit()
-
         # Always call the base class implementation to handle remaining logic
         super().mouseReleaseEvent(event)
 
@@ -233,14 +232,11 @@ class EnergyBall(QWidget):
         animation.setStartValue(QSize(original_width, original_height))  # Start at original size
         animation.setEndValue(QSize(zoomed_width, zoomed_height))  # End at zoomed size
         animation.setDuration(duration)  # Duration of 1 second
-
         # Handle value changes during the animation
         def resize_frames(size):
             self.movie.setScaledSize(size)
-
         # Connect animation changes to the resize logic
         animation.valueChanged.connect(resize_frames)
-
         # Reverse the animation after 1 second
         def reverse_zoom():
             reverse_animation = QVariantAnimation(self)
@@ -252,7 +248,6 @@ class EnergyBall(QWidget):
 
         # Trigger the reverse animation after finishing the first one
         animation.finished.connect(reverse_zoom)
-
         animation.start()
 
     def pulsate_effect(self):
@@ -266,49 +261,38 @@ class EnergyBall(QWidget):
                 self.pulse_timer.stop()
                 self.logger.debug("[ENERGY] Pulsating stopped.")
             return  # Exit if we are stopping pulsating
-
         # Initialize pulsating effect
         self.logger.debug("[ENERGY] Pulsating started.")
         self.pulsating = True
-
         # Create a timer for random intervals
         if not hasattr(self, "pulse_timer"):
             self.pulse_timer = QTimer(self)
-
         # Define the pulsate animation logic
         def single_pulse(zoom_factor=1.03, duration=1000):
             if not self.pulsating:  # Stop if pulsating was toggled off
                 return
-
             original_width, original_height = self.original_size
             zoomed_width = int(original_width * zoom_factor)
             zoomed_height = int(original_height * zoom_factor)
-
             # Create the animation
             animation = QVariantAnimation(self)
             animation.setStartValue(QSize(original_width, original_height))  # Start at original size
             animation.setEndValue(QSize(zoomed_width, zoomed_height))  # End at zoomed size
             animation.setDuration(duration)  # Duration of each pulse (grow-shrink cycle)
-
             def resize_frames(size):
                 self.movie.setScaledSize(size)  # Resize the QMovie dynamically
-
             animation.valueChanged.connect(resize_frames)
-
             # Reverse animation logic after the animation ends
             animation.finished.connect(lambda: resize_frames(QSize(original_width, original_height)))
             animation.start()
-
         # Schedule the next pulse with random intervals
         def schedule_next_pulse(rand_a=100, rand_b=1000):
             if self.pulsating:  # Continue pulsating
                 single_pulse()
                 random_delay = random.randint(rand_a, rand_b)  # Add a random delay (500ms to 1000ms)
                 self.pulse_timer.start(random_delay)
-
         # Connect the timer timeout to the schedule function
         self.pulse_timer.timeout.connect(schedule_next_pulse)
-
         # Trigger the first pulse immediately
         schedule_next_pulse()
 
