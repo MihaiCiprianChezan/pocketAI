@@ -35,7 +35,6 @@ class EnergyBall(QWidget):
         layout.addWidget(self.label)
         self.setLayout(layout)
         # State variables for interaction
-        self.is_dragging = False
         self.offset = None
         self.current_color = QColor(0, 0, 0)  # Keeps the current overlay color
         self.is_dragging = False  # Initialize dragging state
@@ -108,9 +107,9 @@ class EnergyBall(QWidget):
     def set_colorized(self, target_color: QColor, duration=800):
         if self.current_color == target_color:
             self.label.setGraphicsEffect(None)
-            self.current_color = None
-        if self.current_color is None:
             self.current_color = QColor(0, 0, 0)
+        # if self.current_color is None:
+        #     self.current_color = QColor(0, 0, 0)
         animation = QVariantAnimation(self)
         animation.setStartValue(self.current_color)
         animation.setEndValue(target_color)
@@ -135,6 +134,52 @@ class EnergyBall(QWidget):
         Reset the widget to its original appearance by fading out.
         """
         self.set_colorized(QColor(0, 0, 0))  # Transition smoothly back to black (reset state)
+
+    def reset_colorized(self, command, _params=None, duration=500):
+        """
+        Smoothly transition to no graphic effect.
+        """
+        # Check if there is an existing effect
+        if not self.label.graphicsEffect() or not isinstance(self.label.graphicsEffect(), QGraphicsColorizeEffect):
+            return  # No effect to remove
+        # Create an animation to reduce the effect's strength smoothly
+        animation = QVariantAnimation(self)
+        animation.setStartValue(1.0)  # Full strength of the effect
+        animation.setEndValue(0.0)  # No effect (reset state)
+        animation.setDuration(duration)  # Duration in milliseconds
+
+
+        def fade_out_effect(opacity):
+            # Validate opacity
+            if not (0.0 <= opacity <= 1.0):
+                raise ValueError("Opacity must be between 0.0 and 1.0")
+
+            if self.label is None:
+                raise AttributeError("Label is not set.")
+
+            effect = self.label.graphicsEffect()
+            if effect is None:
+                # Apply a new graphics effect if one does not exist
+                effect = QGraphicsColorizeEffect()
+                self.label.setGraphicsEffect(effect)
+
+            if isinstance(effect, QGraphicsColorizeEffect):
+                effect.setStrength(opacity)
+                if opacity == 0.0:
+                    # Optionally remove the effect when faded out
+                    self.label.setGraphicsEffect(None)
+
+        # Connect the animation's valueChanged signal to dynamically update the effect
+        animation.valueChanged.connect(fade_out_effect)
+        animation.start()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(self.circle_color)
+        painter.setPen(Qt.NoPen)
+        radius = max(self.width() - 20, self.height() - 20) // 2
+        painter.drawEllipse(self.rect().center(), radius, radius)
 
     def mousePressEvent(self, event: QMouseEvent):
         """
@@ -269,32 +314,6 @@ class EnergyBall(QWidget):
         # Trigger the first pulse immediately
         schedule_next_pulse()
 
-    def reset_colorized(self, command, _params=None, duration=500):
-        """
-        Smoothly transition to no graphic effect.
-        """
-        # Check if there is an existing effect
-        if not self.label.graphicsEffect() or not isinstance(self.label.graphicsEffect(), QGraphicsColorizeEffect):
-            return  # No effect to remove
-        # Create an animation to reduce the effect's strength smoothly
-        animation = QVariantAnimation(self)
-        animation.setStartValue(1.0)  # Full strength of the effect
-        animation.setEndValue(0.0)  # No effect (reset state)
-        animation.setDuration(duration)  # Duration in milliseconds
-
-        def fade_out_effect(opacity):
-            if self.label.graphicsEffect() and isinstance(self.label.graphicsEffect(), QGraphicsColorizeEffect):
-                self.label.graphicsEffect().setStrength(opacity)  # Set effect strength dynamically
-            if opacity == 0.0:
-                effect = self.label.graphicsEffect()
-                if isinstance(effect, QGraphicsColorizeEffect):
-                    effect.setStrength(1.0)  # Reset strength for future use
-                self.label.setGraphicsEffect(None)
-
-        # Connect the animation's valueChanged signal to dynamically update the effect
-        animation.valueChanged.connect(fade_out_effect)
-        animation.start()
-
     def keyPressEvent(self, event):
         """
         Handle key events for interaction.
@@ -329,15 +348,6 @@ class EnergyBall(QWidget):
         elif event.key() == Qt.Key_Escape:  # Exit
             self.close()
             QCoreApplication.quit()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(self.circle_color)
-        painter.setPen(Qt.NoPen)
-        radius = max(self.width() - 20, self.height() - 20) // 2
-        painter.drawEllipse(self.rect().center(), radius, radius)
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

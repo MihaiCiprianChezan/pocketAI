@@ -5,22 +5,22 @@ NON_ALPHANUMERIC_REGEX = re.compile(r'[^a-zA-Z0-9\s]')
 MULTIPLE_SPACES_REGEX = re.compile(r'\s+')
 
 # Colorize colors for ball effects
-RED = {"color": (80, 0, 0)}
-BLUE = {"color": (0, 10, 100)}
-GREEN = {"color": (0, 60, 0)}
-YELLOW = {"color": (135, 105, 35)}
-BRIGHT_YELLOW = {"color": (212, 175, 55)}
-MAGENTA = {"color": (60, 0, 60)}
-GREY = {"color": (50, 50, 50)}
-ORANGE = {"color": (100, 50, 0)}
-BROWN = {"color": (60, 30, 10)}
-PINK = {"color": (70, 20, 30)}
-CYAN = {"color": (0, 80, 80)}
-LIME = {"color": (50, 100, 0)}
-PURPLE = {"color": (50, 0, 100)}
-TURQUOISE = {"color": (0, 100, 100)}
-DARK_GREY = {"color": (30, 30, 30)}
-LIGHT_GREY = {"color": (80, 80, 80)}
+RED = {"color": (80, 0, 0, 150)}
+BLUE = {"color": (0, 10, 100, 150)}
+GREEN = {"color": (0, 60, 0, 150)}
+YELLOW = {"color": (135, 105, 35, 150)}
+BRIGHT_YELLOW = {"color": (212, 175, 150)}
+MAGENTA = {"color": (60, 0, 60, 150)}
+GREY = {"color": (50, 50, 50,150)}
+ORANGE = {"color": (100, 50, 0, 150)}
+BROWN = {"color": (60, 30, 10, 150)}
+PINK = {"color": (70, 20, 30, 150)}
+CYAN = {"color": (0, 80, 80, 150)}
+LIME = {"color": (50, 100, 0, 150)}
+PURPLE = {"color": (50, 0, 100, 150)}
+TURQUOISE = {"color": (0, 100, 100, 150)}
+DARK_GREY = {"color": (30, 30, 30, 150)}
+LIGHT_GREY = {"color": (80, 80, 80, 150)}
 TRANSPARENT = {"color": (0, 0, 0)}
 
 # Zoom effects for the ball
