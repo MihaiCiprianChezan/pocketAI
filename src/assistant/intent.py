@@ -8,9 +8,9 @@ DEFAULT_MODEL_NAME = str(MODELS_DIR / "cross-encoder-nli-distilroberta-base")  #
 GENERIC_INTENTS = [
     "unknown intent",
     "general request",
-    # "help request"
-    "summarize text",
-    "translate text"
+    "explain request",
+    "summarize request",
+    "translate request",
 ]
 
 @dataclass

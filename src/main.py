@@ -84,6 +84,7 @@ class VoiceApp(QObject):
             ("read", "this"): lambda a: self.read_selected_text(a),
             ("explain", "this"): lambda a: self.explain_selected_text(a),
             ("summarize", "this"): lambda a: self.summarize_selected_text(a),
+            ("summary", "of", "this"): lambda a: self.summarize_selected_text(a),
 
             ("translate", "to", "english"): lambda a: self.translate_selected_text(a, 'en'),
             ("translate", "into", "english"): lambda a: self.translate_selected_text(a, 'en'),
@@ -308,7 +309,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Please explain this: `{copied_text}`"
+            prompt = f"Explain this: `{copied_text}`"
             ai_response = self.get_ai_response(prompt, lang=lang)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
@@ -320,7 +321,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Please summarize this: `{copied_text}`"
+            prompt = f"Summarize `{copied_text}`. Output only the plain text, in a single line, without any formatting or additional comments."
             ai_response = self.get_ai_response(prompt, lang=lang)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 

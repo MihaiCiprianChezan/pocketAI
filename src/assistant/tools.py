@@ -48,11 +48,7 @@ class WikipediaTool(Tool):
     target = "assistant"
     intents = [
         "find",
-        "what is",
-        "who is",
-        "define",
         "search wikipedia",
-        "what are"
     ]
 
     description = (
