@@ -104,12 +104,10 @@ class EnergyBall(QWidget):
         widget_width, widget_height = self.original_size
         self.move(screen_width - widget_width - padding, screen_height - widget_height - padding)
 
-    def set_colorized(self, target_color: QColor, duration=800):
-        if self.current_color == target_color:
+    def set_colorized(self, target_color: QColor, duration=500):
+        if self.current_color == target_color or self.current_color is None:
             self.label.setGraphicsEffect(None)
-            self.current_color = QColor(0, 0, 0)
-        # if self.current_color is None:
-        #     self.current_color = QColor(0, 0, 0)
+            self.current_color = QColor(None)
         animation = QVariantAnimation(self)
         animation.setStartValue(self.current_color)
         animation.setEndValue(target_color)
