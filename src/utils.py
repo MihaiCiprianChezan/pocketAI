@@ -8,7 +8,16 @@ import pyperclip
 from app_logger import AppLogger
 from varstore import GLITCHES, MULTIPLE_SPACES_REGEX
 
+HF_TOKEN = "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"
 MODELS_DIR = Path(__file__).parent.parent / "models"
+ALL_MINI_LM_L6_V2 = str(MODELS_DIR / "all-MiniLM-L6-v2")
+VOSK_MODEL_SMALL_EN_US_0_15 = str(MODELS_DIR / "vosk-model-small-en-us-0.15")
+VOSK_MODEL_EN_US_0_22_LGRAPH = str(MODELS_DIR / "vosk-model-en-us-0.22-lgraph")
+INTERNLM__2_5__1_8_B_CHAT = str(MODELS_DIR / "internlm2_5-1_8b-chat")
+THUDM_GLM_EDGE_1_5_B_CHAT = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")
+CROSS_ENCODER_NLI_DISTILROBERTA_BASE = str(MODELS_DIR / "cross-encoder-nli-distilroberta-base")
+
+
 
 
 class Utils:

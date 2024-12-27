@@ -9,12 +9,11 @@ import warnings
 import numpy as np
 import pyaudio
 
-from utils import MODELS_DIR
+from utils import VOSK_MODEL_SMALL_EN_US_0_15
 
 with open(os.devnull, "w") as f:
     sys.stdout = f
     import pygame  # The Pygame module initializes here
-
     sys.stdout = sys.__stdout__  # Restore stdout
 import pyttsx3
 import speech_recognition as sr
@@ -53,9 +52,8 @@ class SpeechProcessor:
         self.logger.debug(f"[SOUND_PROCESSOR] Using device: {device}")
         if self.use_vosk:
             # Vosk initialization
-            # self.recognition_model_path = "../models/vosk-model-small-en-us-0.15"
-            self.recognition_model_path = str(MODELS_DIR / "vosk-model-small-en-us-0.15")
-            # self.recognition_model_path = str(MODELS_DIR / "vosk-model-en-us-0.22-lgraph")
+            self.recognition_model_path = VOSK_MODEL_SMALL_EN_US_0_15
+            # self.recognition_model_path = VOSK_MODEL_EN_US_0_22_LGRAPH
             try:
                 self.model_vosk = vosk.Model(self.recognition_model_path)
                 self.recognizer_vosk = vosk.KaldiRecognizer(self.model_vosk, 16000)

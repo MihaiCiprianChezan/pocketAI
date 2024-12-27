@@ -6,12 +6,10 @@ import threading
 import time
 from time import sleep
 import traceback
-
 from better_profanity import profanity
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
-
-from assistant.assistant2 import Assistant, HistoryManager
+from assistant.assistant import Assistant
 from atention import Attention
 from energy_ball import EnergyBall
 from speech_processor import SpeechProcessorTTSX3
@@ -38,10 +36,8 @@ class VoiceApp(QObject):
         super().__init__()
         self.logger_instance = AppLogger(file_name="VoiceUtilApp.log", overwrite=True, log_level=logging.DEBUG)
         self.logger = self.logger_instance
-        # self.logger = self.logger_instance.get_logger()
         self.speech_processor = SpeechProcessorTTSX3()
-        self.chat_assistant = Assistant()
-        self.history_manager = HistoryManager()
+        self.assistant = Assistant()
         self.utils = Utils()
 
         self.recognized_speech_queue = Queue(1000)  # Shared queue for recognized speech
@@ -261,7 +257,7 @@ class VoiceApp(QObject):
         if not self.chat_mode:
             self.agent_speak("Chat resumed!", after_color=self.INITIAL)
             self.chat_mode = True
-            self.history_manager.clean()
+            self.assistant.history_manager.clean()
             self.logger.debug("[APP] Chat mode resumed.")
             return
         self.agent_speak("Chat mode is already active!")
@@ -392,7 +388,7 @@ class VoiceApp(QObject):
 
         last_update_time, random_interval = self._initialize_time() if entertain else (None, None)
         response = ""
-        response_iter = self.chat_assistant.get_response(spoken_prompt, context_free=context_free)
+        response_iter = self.assistant.get_response(spoken_prompt, context_free=context_free)
 
         # AI will generate the response ...
         self.logger_instance.pause()
@@ -423,6 +419,7 @@ class VoiceApp(QObject):
         self.logger_instance.resume()
         self.logger.debug(f"[APP][AI_ASSISTANT] Response: {response}")
         self.logger.debug(f"[APP][AI_ASSISTANT] Response cleaned: {ai_response}")
+        self.assistant.history_manager.add(ai_response, role="assistant")
         return ai_response
 
     def entertain(self, min_interval=2, max_interval=5):

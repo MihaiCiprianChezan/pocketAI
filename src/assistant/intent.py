@@ -4,9 +4,8 @@ import traceback
 from transformers import pipeline
 
 from app_logger import AppLogger
-from utils import MODELS_DIR
+from utils import CROSS_ENCODER_NLI_DISTILROBERTA_BASE
 
-DEFAULT_MODEL_NAME = str(MODELS_DIR / "cross-encoder-nli-distilroberta-base")  # cross-encoder/nli-distilroberta-base
 GENERIC_INTENTS = [
     "unknown intent",
     "general request",
@@ -23,7 +22,7 @@ class DetectionResult:
 
 
 class Intent:
-    def __init__(self, labels=None, model_name=DEFAULT_MODEL_NAME):
+    def __init__(self, labels=None, model_name=CROSS_ENCODER_NLI_DISTILROBERTA_BASE):
         """
         Initializes the intent detector with the specified model.
         """
