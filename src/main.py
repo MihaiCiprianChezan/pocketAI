@@ -11,7 +11,7 @@ from better_profanity import profanity
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 
-from assistant.assistant import ChatAssistant
+from assistant.assistant2 import Assistant, HistoryManager
 from atention import Attention
 from energy_ball import EnergyBall
 from speech_processor import SpeechProcessorTTSX3
@@ -40,7 +40,8 @@ class VoiceApp(QObject):
         self.logger = self.logger_instance
         # self.logger = self.logger_instance.get_logger()
         self.speech_processor = SpeechProcessorTTSX3()
-        self.chat_assistant = ChatAssistant()
+        self.chat_assistant = Assistant()
+        self.history_manager = HistoryManager()
         self.utils = Utils()
 
         self.recognized_speech_queue = Queue(1000)  # Shared queue for recognized speech
@@ -51,7 +52,6 @@ class VoiceApp(QObject):
         self.buffer_text = ""
         self.chat_mode = True
         self.assistant_speaking = False
-        self.history = []
         self.previous_expression = ""
         self.saluted = False
         self.name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
@@ -261,7 +261,7 @@ class VoiceApp(QObject):
         if not self.chat_mode:
             self.agent_speak("Chat resumed!", after_color=self.INITIAL)
             self.chat_mode = True
-            self.history = []
+            self.history_manager.clean()
             self.logger.debug("[APP] Chat mode resumed.")
             return
         self.agent_speak("Chat mode is already active!")
@@ -386,14 +386,13 @@ class VoiceApp(QObject):
         Will also progressively print in the console the full response from the AI model.
         Once the response from the AI model is received, it will be spoken out loud.
         """
-        self.logger.debug(f"[USER] (*) Says to AI Assistant: {spoken_prompt}")
+        self.logger.debug(f"(*) [USER] Says to AI Assistant: \"{spoken_prompt}\"")
         self.ball_change_color(colour)
         self.read_unique(SHORT_CONFIRMS)
+
         last_update_time, random_interval = self._initialize_time() if entertain else (None, None)
         response = ""
-        clean_history = []
-        history = clean_history if context_free else self.history
-        response_iter = self.chat_assistant.get_response(history, spoken_prompt, lang=lang, context_free=context_free)
+        response_iter = self.chat_assistant.get_response(spoken_prompt, context_free=context_free)
 
         # AI will generate the response ...
         self.logger_instance.pause()
@@ -451,7 +450,7 @@ class VoiceApp(QObject):
     # --------------------- Energy ball related ----------------------------
 
     def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en", do_not_interrupt=False):
-        self.logger.debug(f"[APP][AI_ASSISTANT] (*) Says: \"{speech_script}\" [Energy Color: {speaking_color}]")
+        self.logger.debug(f"(*) [APP][AI_ASSISTANT] Says: \"{speech_script}\" [Energy Color: {speaking_color}]")
         call_before = self.speak_call_before
         call_back = self.speak_callback
         if speaking_color:

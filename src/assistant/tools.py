@@ -5,6 +5,20 @@ import wikipedia
 
 from app_logger import AppLogger
 
+def get_tools_summary(tool_list):
+    tools = []
+    for tool in tool_list:
+        tools.append(
+            {
+                "name": f"{tool.name}",
+                "description": f"{tool.description}",
+                "inputs": f"{tool.inputs}",
+                "output_type": f"{tool.output_type}",
+                # "intents": f"{tool.intents}",
+                # "target": f"{tool.target}",
+            }
+        )
+    return tools
 
 class DateTimeTool(Tool):
     name = "datetime-tool"
@@ -26,7 +40,7 @@ class DateTimeTool(Tool):
     )
 
     inputs = {
-        "query": {"type": "string", "description": "A string that specifies either 'date' or 'time' for returning the current date or time."}
+        "query": {"type": "string", "description": "A string that specifies date or time or date and time for returning the current date or time or both together."}
     }
 
     output_type = "string"

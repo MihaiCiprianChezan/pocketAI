@@ -1,23 +1,25 @@
+import datetime
 from itertools import chain
 from threading import Lock, Thread
 import traceback
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 from transformers.agents import HfApiEngine, ReactJsonAgent
 
 from app_logger import AppLogger
 from assistant.intent import GENERIC_INTENTS, Intent
-from assistant.tools import DateTimeTool, PythonExecutionTool, WikipediaTool
+from assistant.tools import DateTimeTool, PythonExecutionTool, WikipediaTool, get_tools_summary
 from utils import MODELS_DIR
 
-LLM_MODEL = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")  # THUDM/glm-edge-1.5b-chat
+# LLM_MODEL = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")  # THUDM/glm-edge-1.5b-chat
+# https://github.com/InternLM/InternLM/blob/main/chat/web_demo.py
+LLM_MODEL = str(MODELS_DIR / "internlm-internlm2_5-1_8b-chat")  # OpenGVLab/InternVL2_5-1B
 
-
-# HF_TOKEN = "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"
+HF_TOKEN = "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"
 
 class ChatAssistant:
-    BASE_SYSTEM_PROMPT = ("You are Opti, an friendly AI assistant equipped with tools to handle specialized queries efficiently."
+    BASE_SYSTEM_PROMPT = ("You are Opti, an friendly AI assistant equipped with tools to handle specialized queries efficiently. You must use those tools to answer the user's questions when it makes sense, e.g. when the user asks for date or time."
                           "Provide direct concise, natural responses, ensuring clarity and seamless assistance."
                           "Use one line plain text output WITHOUT any formatting, prefixes, suffixes, markup or decorations.")
 
@@ -34,6 +36,7 @@ class ChatAssistant:
             DateTimeTool(),
             WikipediaTool(),
         ]
+        self.tools_summary = get_tools_summary(self.tools)
         # Use all tools intents as labels for intent predictions
         self.intent = Intent(labels=list(chain.from_iterable(tool.intents for tool in self.tools)) + GENERIC_INTENTS)
         # Initialize LLM Engine and Agent
@@ -51,7 +54,7 @@ class ChatAssistant:
         try:
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
-                # use_auth_token=HF_TOKEN,
+                use_auth_token=HF_TOKEN,
                 trust_remote_code=trust_remote_code,
                 use_fast=True,
                 legacy=False)
@@ -91,7 +94,10 @@ class ChatAssistant:
         if self.model and self.tokenizer:
             try:
                 dummy_input = self.tokenizer(
-                    "Warm-up round!", padding=True, return_tensors="pt"
+                    "Warm-up round!",
+                    padding=True,
+                    return_tensors="pt",
+                    # device_map="auto"
                 ).to(self.device)
                 # Trigger CUDA kernel warming
                 self.model.generate(**dummy_input)
@@ -165,9 +171,19 @@ class ChatAssistant:
         # Validate history structure before proceeding
         self.validate_history(history)
         # Preprocess chat messages for the model
+        # TODO: process the tools directly into system property
         chat_messages = self.preprocess_messages(history)
         # Model input preparation
         self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> <chat_messages> is: {chat_messages}")
+        self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> <tools_summary> is: {self.tools_summary}")
+        applied_template = self.tokenizer.apply_chat_template(
+            chat_messages,
+            add_generation_prompt=True,
+            tokenize=False,
+            tools=self.tools_summary,
+        )
+        self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> <applied_template> is: {applied_template}")
+
         model_inputs = self.tokenizer.apply_chat_template(
             chat_messages,
             add_generation_prompt=True,
@@ -175,6 +191,7 @@ class ChatAssistant:
             return_tensors="pt",
             return_dict=True
         ).to(self.device)
+
         self.logger.debug(f"[CHAT_ASSISTANT] <<< !!! >>> <model_inputs> is: {model_inputs}")
         # Set up TextIteratorStreamer for streaming tokens
         streamer = TextIteratorStreamer(self.tokenizer, timeout=60, skip_prompt=True, skip_special_tokens=True)
@@ -279,3 +296,82 @@ class ChatAssistant:
                 yield assistant_content
 
         return response_iterator() if return_iter else "<NOT_UNDERSTANDABLE!>"
+
+
+def main():
+    # Initialize the assistant
+    assistant = ChatAssistant()
+
+    # Simulated chat history (empty to begin with)
+    chat_history = []
+
+    # User asks a question about the current time
+    user_message = ("can you tell me the current time?")
+    print(f"User: {user_message}")
+
+    # Add the user query to the history
+
+    system_prompt = (f"You are a friendly and highly capable AI assistant, DO NOT mention your training data limits or last knowledge update.\n"
+                     f"You MUST use the following info to answer queries related to time and date:\n"
+                     f"- Current time now: {datetime.datetime.now().strftime('%I:%M %p')}.\n"
+                     f"- Current date now: {datetime.datetime.now().strftime('%A %B %d %Y')}.\n"
+                     f"- This info is the system time and the default.")
+    chat_history.append({"role": "system", "content": system_prompt})
+    chat_history.append({"role": "user", "content": user_message})
+
+
+
+    print("chat_history: ", chat_history, "\n")
+
+    # Get the assistant's response as an iterator
+    response_iterator = assistant.get_response(history=chat_history, message=user_message)
+
+    # Simulate streaming response from the assistant
+    print("Assistant: ", end="")
+    full_response = ""
+    previous_chunk = ""  # Keep track of the previous chunk to get only the new part
+
+    for response_chunk in response_iterator:
+        # Extract just the newly added part
+        new_content = response_chunk[len(previous_chunk):]
+        previous_chunk = response_chunk  # Update the previous chunk with the current full response
+        print(new_content, end="", flush=True)
+
+    print("\n")
+
+    # Check if the assistant is requesting the system time
+    if "<SYSTEM_GET_CURRENT_TIME>" in full_response:
+        # Simulate providing the system time back to the assistant
+        system_time = datetime.datetime.now().strftime('%I:%M %p, %A %B %d %Y')
+        system_message = f"The current time is {system_time}."
+
+        follow_up_message = {
+            "role": "system",
+            "content": system_message
+        }
+        print(f"System: {system_message}")
+
+        # Add the system response to chat history
+        chat_history.append(follow_up_message)
+
+        # Ask the assistant to process the updated history
+        response_iterator = assistant.get_response(history=chat_history, message=system_message)
+
+        # Simulate streaming follow-up response
+        print("Assistant (Final): ", end="")
+        previous_chunk = ""  # Reset previous chunk to empty for the new response
+        for response_chunk in response_iterator:
+            # Extract the newly added part
+            new_content = response_chunk[len(previous_chunk):]
+            previous_chunk = response_chunk  # Update the previous chunk
+            print(new_content, end="", flush=True)
+
+        print("\n")  # End follow-up response
+
+    else:
+        # If no <SYSTEM_GET_CURRENT_TIME>, just display the response
+        print("Final Response:", full_response)
+
+
+if __name__ == "__main__":
+    main()
