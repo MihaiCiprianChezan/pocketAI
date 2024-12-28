@@ -16,10 +16,14 @@ class Assistant:
         self.similarity = Similarity()
         self.model_manager.warm_model()
 
-    def get_response(self, message, context_free=False, max_length=150, top_p=0.8, temperature=0.7):
+    def get_response(self, message, context_free=False, max_length=256, top_p=0.8, temperature=0.7):
         self.logger.debug(f"[Assistant] History before: {self.history_manager.history}")
         self.logger.debug(f"[Assistant] User query: `{message}`")
         if context_free:
+            self.logger.debug(f"[Assistant] context_free=True, using a clean history")
+            self.history_manager.clean_empty()
+            # self.history_manager.add_clean("When asked to translate you MUST output ONLY the plain translation, in a single line, without any formatting and without any additional comments besides the translation text itself.", role="system")
+            self.history_manager.add_clean(message, role="user")
             history = self.history_manager.clean_history
         else:
             if len(self.history_manager.history) > 0:
@@ -31,8 +35,8 @@ class Assistant:
                 if message_score < 0.3 and history_score < 0.5:
                     self.logger.debug(f"[Assistant] User has started a new topic, cleaning history.")
                     self.history_manager.clean()
+            self.history_manager.add(message, role="user")
             history = self.history_manager.history
-        self.history_manager.add(message, role="user")
         self.logger.debug(f"[Assistant] History after: {history}")
 
         tool_response, tool_target = self.tools_manager.dispatch(message)

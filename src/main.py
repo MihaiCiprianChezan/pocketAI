@@ -15,6 +15,7 @@ from energy_ball import EnergyBall
 from speech_processor import SpeechProcessorTTSX3
 from utils import *
 from varstore import *
+from translation import TranslationService
 
 
 class VoiceApp(QObject):
@@ -39,6 +40,7 @@ class VoiceApp(QObject):
         self.speech_processor = SpeechProcessorTTSX3()
         self.assistant = Assistant()
         self.utils = Utils()
+        self.translations = TranslationService()
 
         self.recognized_speech_queue = Queue(1000)  # Shared queue for recognized speech
         self.speech_thread = None
@@ -332,10 +334,8 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             language = LANGUAGES[lang]
-            self.logger.debug(f"[APP] [Translating to {lang}:language] of: {copied_text}")
-            prompt = f"Translate `{copied_text}` to {language} language. Output only the plain translation, in a single line, without any formatting or additional comments."
-            self.logger.debug(f"[APP] [Translation prompt]: {prompt}")
-            ai_response = self.get_ai_response(prompt, lang=lang, context_free=True)
+            self.logger.debug(f"[APP] [Translating to {lang}:{language}:language] of: {copied_text}")
+            ai_response = self.translations.auto_translate(copied_text, lang)
             self.agent_speak(ai_response, speaking_color=self.TRANSLATE, after_color=self.INITIAL, lang=lang)
 
     def edit_translate_text(self, is_for_assistant, lang="en"):
@@ -345,10 +345,8 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             language = LANGUAGES[lang]
-            self.logger.debug(f"[APP] [Editor, translating to {lang}:language] of: {copied_text}")
-            prompt = f"Translate `{copied_text}` to {language} language. Output only the plain translation, in a single line, without any formatting or additional comments."
-            self.logger.debug(f"[APP] [Editor, translation prompt]: {prompt}")
-            ai_response = self.get_ai_response(prompt, lang=lang)
+            self.logger.debug(f"[APP] [Editor, translating to {lang}:{language}:language] of: {copied_text}")
+            ai_response = self.translations.auto_translate(copied_text, lang)
             keyboard.send("end")
             keyboard.send("space")
             sleep(0.3)

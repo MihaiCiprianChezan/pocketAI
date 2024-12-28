@@ -19,18 +19,35 @@ class HistoryManager:
             if not isinstance(entry, dict) or ("role" not in entry or "content" not in entry):
                 raise ValueError(f"Invalid history format: {entry}")
 
-    def add(self, message, role="user"):
+    def add_to(self, target_history, message, role="user"):
         with self.history_lock:
             try:
-                if len(self.history) == self.history_size:
-                    self.history = self.history[1:]
+                if len(target_history) == self.history_size:
+                    target_history = target_history[1:]
                 history_entry = {"role": role, "content": message}
-                self.history.append(history_entry)
+                target_history.append(history_entry)
                 self.logger.error(f"[HistoryManager] Added history entry: {history_entry}")
             except Exception as e:
                 self.logger.error(f"[HistoryManager] Error adding message to history: {e}, {traceback.format_exc()}")
+            finally:
+                return target_history
+
+
+    def add(self, message, role="user"):
+        self.history = self.add_to(self.history, message, role)
+
+    def add_clean(self, message, role="user"):
+        self.clean_history = self.add_to(self.clean_history, message, role)
 
     def clean(self):
         with self.history_lock:
             self.history = []
+            self.clean_history = []
+
+    def clean_history(self):
+        with self.history_lock:
+            self.history = []
+
+    def clean_empty(self):
+        with self.history_lock:
             self.clean_history = []

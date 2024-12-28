@@ -28,3 +28,12 @@ better_profanity==0.7.0
 vosk==0.3.45
 fastpunct==2.0.2
 wikipedia==1.4.0
+better-profanity==0.7.0
+torch==2.4.0+cu124
+argostranslate==1.9.6
+langdetect==1.0.9
+einops==0.8.0
+flash-attn==2.5.9.post1
+sentencepiece==0.2.0
+tokenizers==0.21.0
+lmdeploy==0.6.4
