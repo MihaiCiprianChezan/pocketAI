@@ -348,9 +348,9 @@ class VoiceApp(QObject):
             self.logger.debug(f"[APP] [Editor, translating to {lang}:{language}:language] of: {copied_text}")
             ai_response = self.translations.auto_translate(copied_text, lang)
             keyboard.send("end")
-            keyboard.send("space")
+            keyboard.send("enter")
             sleep(0.3)
-            self.utils.write_text(f"{ai_response} ", delay=0.03)
+            self.utils.write_text(f"{ai_response} ", delay=0.005)
             self.agent_speak(f"Here's the text translated to {language}...", speaking_color=self.SPEAKING, after_color=self.OPERATING_TEXT, lang="en")
 
     def exit_app(self, is_for_assistant):
@@ -368,7 +368,7 @@ class VoiceApp(QObject):
                 self.logger.debug("[APP] Program exited cleanly.")
                 sys.exit(0)
             except Exception as e:
-                self.logger.debug(f"[APP] Error exiting: {e}, {e.__traceback__}")
+                self.logger.debug(f"[APP] Error exiting: {e}, {traceback.format_exc()}")
 
     def read_unique(self, expression_list, speaking_color=None, after_color=None, do_not_interrupt=False):
         self.previous_expression = self.utils.get_unique_choice(expression_list, self.previous_expression)
