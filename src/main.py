@@ -33,6 +33,9 @@ class VoiceApp(QObject):
     PAUSED = LIGHT_GREY
     TRANSLATE = CYAN
 
+    # TODO: - Add error check when translation text is various. Make translation a tool.
+    #       - Verify check intent for direct commands ...
+
     def __init__(self):
         super().__init__()
         self.logger_instance = AppLogger(file_name="VoiceUtilApp.log", overwrite=True, log_level=logging.DEBUG)
@@ -334,7 +337,7 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             language = LANGUAGES[lang]
-            self.logger.debug(f"[APP] [Translating to {lang}:{language}:language] of: {copied_text}")
+            self.logger.info(f"[APP] [Translating to {lang}:{language} language] of: {copied_text}")
             ai_response = self.translations.auto_translate(copied_text, lang)
             self.agent_speak(ai_response, speaking_color=self.TRANSLATE, after_color=self.INITIAL, lang=lang)
 
@@ -380,7 +383,7 @@ class VoiceApp(QObject):
         Will also progressively print in the console the full response from the AI model.
         Once the response from the AI model is received, it will be spoken out loud.
         """
-        self.logger.debug(f"(*) [USER] Says to AI Assistant: \"{spoken_prompt}\"")
+        self.logger.info(f"(*) [USER] Says to AI Assistant: \"{spoken_prompt}\"")
         self.ball_change_color(colour)
         self.read_unique(SHORT_CONFIRMS)
 
@@ -445,7 +448,7 @@ class VoiceApp(QObject):
     # --------------------- Energy ball related ----------------------------
 
     def agent_speak(self, speech_script, speaking_color=None, after_color=None, lang="en", do_not_interrupt=False):
-        self.logger.debug(f"(*) [APP][AI_ASSISTANT] Says: \"{speech_script}\" [Energy Color: {speaking_color}]")
+        self.logger.info(f"(*) [APP][AI_ASSISTANT] Says: \"{speech_script}\" [Energy Color: {speaking_color}]")
         call_before = self.speak_call_before
         call_back = self.speak_callback
         if speaking_color:
@@ -564,7 +567,12 @@ class VoiceApp(QObject):
                         self.logger.debug(f"[APP] COMMAND detected in prompt {tokens} ...")
                         continue
 
-                    # Process chat is no command was given, not in edit mode and prompt is valid
+                    # No command was given and agent is speaking, so we skip (unless agent is not speaking or a command)
+                    if self.assistant_speaking:
+                        self.logger.debug(f"[APP] Assistant is speaking and no command was issued, <SKIPPING>: `{spoken}` ...")
+                        continue
+
+                    # No command was given, not in edit mode and prompt is valid
                     if prompt_is_valid and not self.edit_mode_active and (self.chat_mode or addresses_assistant):
                         self.process_chat(spoken, addresses_assistant)
                         continue

@@ -16,7 +16,7 @@ class Assistant:
         self.similarity = Similarity()
         self.model_manager.warm_model()
 
-    def get_response(self, message, context_free=False, max_length=256, top_p=0.8, temperature=0.7):
+    def get_response(self, message, context_free=False, max_length=256, top_p=0.8, temperature=0.7, min_message_score=0.3, min_history_score=0.5):
         self.logger.debug(f"[Assistant] History before: {self.history_manager.history}")
         self.logger.debug(f"[Assistant] User query: `{message}`")
         if context_free:
@@ -32,7 +32,8 @@ class Assistant:
                 history_messages = [message["content"] for message in self.history_manager.history]
                 history_score = self.similarity.get_score([message, *history_messages])
                 self.logger.debug(f"[Assistant] User query is similar {message_score} to the previous message and {history_score} similar to all history")
-                if message_score < 0.3 and history_score < 0.5:
+                # Clear history if current message related score is below min message and history (related) scores
+                if message_score < min_message_score and history_score < min_history_score:
                     self.logger.debug(f"[Assistant] User has started a new topic, cleaning history.")
                     self.history_manager.clean()
             self.history_manager.add(message, role="user")
