@@ -6,6 +6,7 @@ from PySide6.QtGui import QAction, QColor, QMouseEvent, QMovie, QPainter
 from PySide6.QtWidgets import QApplication, QGraphicsColorizeEffect, QLabel, QMenu, QMessageBox, QVBoxLayout, QWidget
 
 from app_logger import AppLogger
+from rectangle_select import RectangleOverlay
 
 
 class EnergyBall(QWidget):
@@ -39,6 +40,7 @@ class EnergyBall(QWidget):
         self.animation_lock = QMutex()
         # Initialize position
         self.init_position()
+        self.rectangle_overlay = RectangleOverlay()
 
     def receive_command(self, command, params):
         if command == "reset_colorized":
@@ -51,6 +53,8 @@ class EnergyBall(QWidget):
             self.stop_pulsating(command, params)
         elif command == "zoom_effect":
             self.zoom_effect_wrapper(command, params)
+        elif command == "rectangle_selection":
+            self.rectangle_selection(command, params)
         elif command == "exit":
             QCoreApplication.quit()
 
@@ -80,6 +84,10 @@ class EnergyBall(QWidget):
         zoom_factor = params.get("factor", 1.1)
         duration = params.get("duration", 100)
         self.zoom_effect(duration, zoom_factor)
+
+    # Slot to handle zoom effect
+    def rectangle_selection(self, command, params={}):
+        self.rectangle_overlay.show()
 
     def show_context_menu(self, position):
         """

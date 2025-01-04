@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import datetime
 import logging
 from queue import Queue
 import sys
@@ -6,19 +7,30 @@ import threading
 import time
 from time import sleep
 import traceback
+import uuid
+
 from better_profanity import profanity
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtWidgets import QApplication, QMainWindow
+
 from assistant.assistant import Assistant
 from atention import Attention
+from commands import *
 from energy_ball import EnergyBall
 from entertain import Entertain
+from prompt import Prompt
 from speech_processor import SpeechProcessorTTSX3
+from translation import TranslationService
 from utils import *
 from varstore import *
-from translation import TranslationService
-from prompt import Prompt
-from commands import *
+from screenshot import ScreenshotUtil
+
+
+class ScreenCaptureThread(QThread):
+    show_screen_capture = Signal()
+
+    def run(self):
+        self.show_screen_capture.emit()  # Emit signal to UI thread
 
 
 class VoiceApp(QObject):
@@ -35,6 +47,7 @@ class VoiceApp(QObject):
     UNCERTAIN = ORANGE
     PAUSED = LIGHT_GREY
     TRANSLATE = CYAN
+    SCREENSHOT_FOLDER = Path("./screenshots")
 
     # TODO: - Add error check when translation text is various. Make translation a tool.
     #       - Verify check intent for direct commands ...
@@ -62,6 +75,9 @@ class VoiceApp(QObject):
         self.name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
         self.general_commands = self.init_commands()
         self.write_commands = self.init_write_commands()
+        self.screen_capture_tool = None
+        self.screenshot_util = ScreenshotUtil(self.logger)
+        # self.rectangle_select = RectangleSelect()
 
     def init_commands(self):
         # a:bool = prompt is Addressing Assistant
@@ -76,6 +92,12 @@ class VoiceApp(QObject):
             SUMMARIZE_THIS: lambda a: self.summarize_selected_text(a),
             ("describe", "images"): lambda a: self.describe_images(a),
             ("describe", "video"): lambda a: self.describe_video(a),
+
+            (
+                ("capture", "screenshot"),
+                ("take", "screenshot")
+            ):lambda a: self.screen_capture(a),
+
             TRANSLATE_TO_ENGLISH: lambda a: self.translate_selected_text(a, 'en'),
             TRANSLATE_TO_FRENCH: lambda a: self.translate_selected_text(a, 'fr'),
             TRANSLATE_TO_GERMAN: lambda a: self.translate_selected_text(a, 'de'),
@@ -215,6 +237,7 @@ class VoiceApp(QObject):
         return False
 
     def debug_match_commands(self, tokens, command_tokens):
+        """ Debug the match commands. """
         self.logger.debug(
             f"[APP] [DEBUG] is_command: {self.is_command(tokens, command_tokens)}, "
             f"command_tokens: {command_tokens}, tokens: {tokens}, "
@@ -286,6 +309,21 @@ class VoiceApp(QObject):
             text = pyperclip.paste()
             self.ball_change_color(self.OPERATING_TEXT)
             self.agent_speak(text, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+
+    def screen_capture(self, is_for_assistant):
+        """Launch the integrated screen capture dialog."""
+        self.send_command_to_ball.emit("rectangle_selection", {})
+        # with Attention(is_for_assistant, "screen_capture()", self.logger):
+        #     formatted_time = datetime.datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
+        #     file_name = Path(f"screenshot_{uuid.uuid4().hex}_{formatted_time}.png")
+        #     dest_file = str(self.SCREENSHOT_FOLDER / file_name)
+        #     self.screenshot_util.capture(dest_file)
+        #     self.logger.debug(f"Screenshot saved at: {dest_file}")
+        #     prompt = Prompt("Please describe the screenshot.")
+        #     prompt.images = [dest_file]
+        #     prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
+        #     ai_response = self.get_ai_response(prompt, context_free=True)
+        #     self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def describe_images(self, is_for_assistant):
         with Attention(is_for_assistant, "process_images()", self.logger):
