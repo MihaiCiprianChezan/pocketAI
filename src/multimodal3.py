@@ -6,11 +6,41 @@ from PIL import Image
 import torch
 import torchvision.transforms as T
 from torchvision.transforms.functional import InterpolationMode
-from transformers import AutoModel, AutoTokenizer, TextIteratorStreamer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 # Constants
+
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+
+META_INSTRUCTION: str = "You are Opti, a friendly, helpful, honest, and harmless AI assistant who can understand and communicate fluently in the language chosen by the user such as English and 中文.\n"
+CONVERSATION_META: str = (
+    META_INSTRUCTION +
+    "Always respond in clear, plain, unformatted text, using natural conversational human language, just as if you were speaking directly to someone in live chat.\n"
+    "You do NOT use in outputs: new lines, markdown, headings, bold, bullet points, numbered lists, or any kind of formatting."
+)
+INLINE_META: str = (
+    META_INSTRUCTION +
+    "Always respond clearly, using natural conversational human language.\n"
+    "You are using ONLY plain text formating instead of markdown or any other formating."
+)
+
+# Model Loading and Chat
+def initialize_model_and_tokenizer(model_path):
+    """Initialize the Vision-LLM model and tokenizer."""
+    model = AutoModel.from_pretrained(
+        model_path,
+        torch_dtype=torch.float16,
+        low_cpu_mem_usage=True,
+        use_flash_attn=True,
+        trust_remote_code=True,
+    ).eval().cuda()
+
+    model.system_message = CONVERSATION_META
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
+    return model, tokenizer
+
 
 
 # Transformations
@@ -119,22 +149,6 @@ def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=3
     pixel_values = torch.cat(pixel_values_list)
     return pixel_values, num_patches_list
 
-
-# Model Loading and Chat
-def initialize_model_and_tokenizer(model_path):
-    """Initialize the Vision-LLM model and tokenizer."""
-    model = AutoModel.from_pretrained(
-        model_path,
-        torch_dtype=torch.bfloat16,
-        low_cpu_mem_usage=True,
-        use_flash_attn=True,
-        trust_remote_code=True,
-    ).eval().cuda()
-
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
-    return model, tokenizer
-
-
 def chat(model, tokenizer, question, pixel_values=None, generation_config=None, history=None, num_patches_list=None, return_history=True):
     """Generate a response from the Vision-LLM model."""
     result = model.chat(
@@ -144,7 +158,8 @@ def chat(model, tokenizer, question, pixel_values=None, generation_config=None, 
         generation_config=generation_config,
         history=history,
         num_patches_list=num_patches_list,
-        return_history=return_history)
+        return_history=return_history,
+    )
     response, history = result if return_history else (result, None)
     return response, history
 
@@ -183,7 +198,8 @@ def stream_chat_with_yield(model, tokenizer, question, pixel_values=None, genera
             history=history,
             generation_config=generation_config,
             num_patches_list=num_patches_list,
-            return_history=return_history
+            return_history=return_history,
+            meta_instruction=CONVERSATION_META,
         )
         if return_history:
             shared_result["response"], shared_result["history"] = result
@@ -239,7 +255,7 @@ def stream_chat(model, tokenizer, question, pixel_values=None, generation_config
             history=history,
             generation_config=generation_config,
             num_patches_list=num_patches_list,
-            return_history=return_history
+            return_history=return_history,
         )
         if return_history:
             shared_result["response"], shared_result["history"] = result
@@ -269,18 +285,18 @@ if __name__ == "__main__":
     model, tokenizer = initialize_model_and_tokenizer(model_path)
     generation_config = dict(max_new_tokens=1024, do_sample=True)
 
-    question = "Hello, what's up?"
+    question = "Hello, who are you and what is your name?"
 
-    # Call the generator function
-    for output in stream_chat_with_yield(model, tokenizer, question=question, return_history=True):
-        if isinstance(output, str):
-            print(output, end='', flush=True)  # Streaming output
-        elif isinstance(output, dict):  # Final response and history after stream
-            print("\n\nFinal Response:", output["response"])
-            print("Updated History:", output["history"])
+    # # Call the generator function
+    # for output in stream_chat_with_yield(model, tokenizer, question=question, return_history=True):
+    #     if isinstance(output, str):
+    #         print(output, end='', flush=True)  # Streaming output
+    #     elif isinstance(output, dict):  # Final response and history after stream
+    #         print("\n\nFinal Response:", output["response"])
+    #         print("Updated History:", output["history"])
 
     # Text-only conversation
-    question = "How are you 100% functional today?"
+    # question = "How are you 100% functional today?"
     # response, history = chat(model, tokenizer, question, generation_config=generation_config)
     # print(f"User: {question}\nAssistant: {response}")
 
@@ -292,7 +308,7 @@ if __name__ == "__main__":
     print(updated_history)
 
     # Single image conversation
-    pixel_values = load_image("./image.jpg", max_num=12).to(torch.bfloat16).cuda()
+    pixel_values = load_image("./samples/image2.jpg", max_num=12).to(torch.float16).cuda()
     # question = "<image>\nPlease describe the image in detail."
     question = "<image>\nPlease briefly describe the image."
     # response, history = chat(model, tokenizer, question, pixel_values, generation_config, history=None)
@@ -307,9 +323,10 @@ if __name__ == "__main__":
     # print(updated_history)
 
     # Video conversation
-    pixel_values, num_patches_list = load_video("./red-panda.mp4", num_segments=8, max_num=1)
-    pixel_values = pixel_values.to(torch.bfloat16).cuda()
+    pixel_values, num_patches_list = load_video("./samples/red-panda.mp4", num_segments=8, max_num=1)
+    pixel_values = pixel_values.to(torch.float16).cuda()
     video_prefix = ''.join([f"Frame{i + 1}: <image>\n" for i in range(len(num_patches_list))])
+
     question = video_prefix + "What is the red panda doing?"
     # response, history = chat(
     #     model, tokenizer, question, pixel_values, generation_config, history=None, num_patches_list=num_patches_list

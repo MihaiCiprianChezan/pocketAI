@@ -1,12 +1,13 @@
 from pathlib import Path
 import random
 import re
-
+import mistune
+from bs4 import BeautifulSoup
 import keyboard
 import pyperclip
 
 from app_logger import AppLogger
-from varstore import GLITCHES, MULTIPLE_SPACES_REGEX
+from varstore import EMOJIS_REGEX, GLITCHES, MULTIPLE_SPACES_REGEX, CHINESE_CHARACTERS_REGEX, KOREAN_CHARACTERS_REGEX, JAPANESE_CHARACTERS_REGEX
 
 HF_TOKEN = "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"
 MODELS_DIR = Path(__file__).parent.parent / "models"
@@ -14,12 +15,10 @@ ALL_MINI_LM_L6_V2 = str(MODELS_DIR / "all-MiniLM-L6-v2")
 VOSK_MODEL_SMALL_EN_US_0_15 = str(MODELS_DIR / "vosk-model-small-en-us-0.15")
 VOSK_MODEL_EN_US_0_22_LGRAPH = str(MODELS_DIR / "vosk-model-en-us-0.22-lgraph")
 INTERNLM__2_5__1_8_B_CHAT = str(MODELS_DIR / "internlm2_5-1_8b-chat")
-INTERN_VL_2_5_2B= str(MODELS_DIR / "InternVL2_5-2B")
+INTERN_VL_2_5_2B = str(MODELS_DIR / "InternVL2_5-2B")
 
 THUDM_GLM_EDGE_1_5_B_CHAT = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")
 CROSS_ENCODER_NLI_DISTILROBERTA_BASE = str(MODELS_DIR / "cross-encoder-nli-distilroberta-base")
-
-
 
 
 class Utils:
@@ -68,43 +67,72 @@ class Utils:
     @staticmethod
     def get_unique_choice(options, last_choice=None):
         """Get a randomly selected option, avoiding the same choice as the last one."""
+        if len(set(options)) <= 1:  # Guard to check if only one unique value exists
+            return options[0]
         new_choice = random.choice(options)
         while new_choice == last_choice:
             new_choice = random.choice(options)
         return new_choice
 
-    def clean_response(self, llm_response, ensure_punctuation=True):
-        """Clean an AI model response string for live chat."""
-        if not isinstance(llm_response, str):
-            return ""
+    @staticmethod
+    def clean_markdown_to_text(markdown_text):
+        """
+        Cleans the output from Markdown and extracts plain text efficiently.
+        """
+        renderer = mistune.create_markdown()
+        html = renderer(markdown_text)
+        plain_text = BeautifulSoup(html, "html.parser").get_text()
+        return plain_text
 
-        # Detect Chinese characters
-        chinese_characters_pattern = re.compile(r"[\u4e00-\u9fff]+")
-        if chinese_characters_pattern.search(llm_response):
-            return llm_response
+    @staticmethod
+    def clean_new_lines(plain_text):
+        """ Remove new lines from a string. """
+        return plain_text.replace('\n', ' ')
 
-        # Regex for cleaning unwanted characters
-        combined_pattern = re.compile(
-            r"\*\*|"  # Double asterisks
-            "##|###|"  # Hashes
-            "[\U0001F600-\U0001FBFF]+"  # Emojis and special symbols
-            "|[\U0000200B-\U0000200D]",  # Zero-width characters
-            flags=re.UNICODE,
-        )
-        cleaned_response = combined_pattern.sub("", llm_response)
+    @staticmethod
+    def clean_multiple_spaces(plain_text):
+        """ Remove multiple spaces from a string. """
+        return MULTIPLE_SPACES_REGEX.sub(' ', plain_text)
 
-        cleaned_text = cleaned_response.replace('\n', ' ')
+    def clean_incomplete(self, plain_text):
+        """ Cleans incomplete parts of a string. """
+        punctuation_marks = (".", "!", "?", ";")
         cut_part = None
-        if ensure_punctuation and "." in cleaned_text:
-            if not cleaned_text.endswith((".", "!", "?", ";")):
-                last_punctuation = max(cleaned_text.rfind("."), cleaned_text.rfind("!"), cleaned_text.rfind("?"), cleaned_text.rfind(";"))
+        if any(mark in plain_text for mark in punctuation_marks):
+            if not plain_text.endswith(punctuation_marks):
+                last_punctuation = max(plain_text.rfind("."), plain_text.rfind("!"), plain_text.rfind("?"), plain_text.rfind(";"))
                 if last_punctuation != -1:
-                    cut_part = cleaned_text[last_punctuation + 1:].strip()
-                    cleaned_text = cleaned_text[:last_punctuation + 1].strip()
-        cleaned_text = cleaned_text.strip()
+                    cut_part = plain_text[last_punctuation + 1:].strip()
+                    plain_text = plain_text[:last_punctuation + 1].strip()
+        plain_text = plain_text.strip()
         if cut_part:
             self.logger.debug(f"[UTILS] Cleaned out incomplete part: {cut_part}")
-        return cleaned_text
+        return plain_text
+
+    @staticmethod
+    def clean_emojis(plain_text):
+        return EMOJIS_REGEX.sub("", plain_text)
+
+    @staticmethod
+    def is_eastern_asian(plain_text):
+        return ((CHINESE_CHARACTERS_REGEX.search(plain_text))
+                or (JAPANESE_CHARACTERS_REGEX.search(plain_text))
+                or (KOREAN_CHARACTERS_REGEX.search(plain_text))
+                or (JAPANESE_CHARACTERS_REGEX.search(plain_text)))
+
+    def deep_text_clean(self, plain_text: str):
+        if not plain_text:
+            return ""
+        # Preserve Chinese, Korean and Japanese characters and phrases ...
+        if self.is_eastern_asian(plain_text):
+            return plain_text
+        # Make a deep clean of the text
+        plain_text = self.clean_markdown_to_text(plain_text)
+        plain_text = self.clean_new_lines(plain_text)
+        plain_text = self.clean_multiple_spaces(plain_text)
+        plain_text = self.clean_incomplete(plain_text)
+        plain_text = self.clean_emojis(plain_text)
+        return plain_text.strip()
 
     @staticmethod
     def clean_text(text):

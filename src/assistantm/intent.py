@@ -14,6 +14,33 @@ GENERIC_INTENTS = [
     "translate request",
 ]
 
+GENERIC_CHAT_INTENTS = [
+    "unknown intent",
+    "information seeking",
+    "task execution",
+    "clarification request",
+    "greeting",
+    "goodbye",
+    "opinion seeking",
+    "chit-chat",
+    "feedback",
+    "correction",
+    "confirmation",
+    "refusal",
+    "error reporting",
+    "query about features",
+    "help request",
+    "personalization",
+    "searching for content",
+    "command execution",
+    "learning about assistant",
+    "joke or fun request",
+    "emotional support",
+    "follow-up query",
+    "capability testing",
+]
+
+
 
 @dataclass
 class DetectionResult:

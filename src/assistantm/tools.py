@@ -63,7 +63,7 @@ class WikipediaTool(Tool):
     name = "wikipedia-tool"
     target = "assistant"
     intents = [
-        "find",
+        "find wikipedia",
         "search wikipedia",
     ]
 

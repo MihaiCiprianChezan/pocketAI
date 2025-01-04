@@ -77,11 +77,7 @@ class Similarity:
         return round(result["overall_similarity"], digits)
 
 if __name__ == "__main__":
-
-    # Instantiate the similarity model
     similarity_model = Similarity()
-
-    # Pairwise comparison (two sentences)
     sentences = [
         "What can you tell me about Kangaroos?",
         "Tell me more about marsupials.",
@@ -89,17 +85,12 @@ if __name__ == "__main__":
         "Is Tasmania good for lifestyle of marsupials?.",
         "What about rocket science?."
     ]
-
     result_two = similarity_model.get_score(sentences[:2])
     print(f"Pairwise Result: {result_two}")
-
     results = similarity_model.compare_multiple(sentences)
-
-
     print("\nPairwise Similarities:")
     for pair in results["pairwise"]:
         print(pair)
     print("Overall Similarity:", results["overall_similarity"])
-
     result = similarity_model.get_score(sentences)
     print(f"Result: {result}")

@@ -9,13 +9,15 @@ import traceback
 from better_profanity import profanity
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
-from assistant.assistant import Assistant
+from assistantm.assistant import Assistant
 from atention import Attention
 from energy_ball import EnergyBall
+from entertain import Entertain
 from speech_processor import SpeechProcessorTTSX3
 from utils import *
 from varstore import *
 from translation import TranslationService
+from prompt import Prompt
 
 
 class VoiceApp(QObject):
@@ -42,6 +44,7 @@ class VoiceApp(QObject):
         self.logger = self.logger_instance
         self.speech_processor = SpeechProcessorTTSX3()
         self.assistant = Assistant()
+        self.assistant.initialize()
         self.utils = Utils()
         self.translations = TranslationService()
 
@@ -59,37 +62,92 @@ class VoiceApp(QObject):
         self.general_commands = self.init_commands()
         self.write_commands = self.init_write_commands()
 
+        self.prompt = Prompt("")
+
     def init_commands(self):
         # a:bool = prompt is Addressing Assistant
+        # TODO: lists for similar commands...
         return {
-            # EDIT MODE enter - Will run edit commands
-            ("editing", "mode"): lambda a: self.activate_write_mode(a),
-            ("enter", "editing"): lambda a: self.activate_write_mode(a),
-            ("editing", "please"): lambda a: self.activate_write_mode(a),
+            (  # EDIT MODE enter - Will run edit commands
+                ("editing", "mode"),
+                ("enter", "editing"),
+                ("editing", "please"),
+                ("start", "editing"),
+                ("enable", "editing"),
+                ("switch", "editing"),
+                ("go", "editing"),
+                ("write", "mode"),
+                ("activate", "editing"),
+                ("turn", "on", "editing")
+            ): lambda a: self.activate_write_mode(a),
 
-            # CHAT MODE enter - will prompt the AI
-            ("start", "chat"): lambda a: self.start_chat(a),
-            ("resume", "chat"): lambda a: self.start_chat(a),
-            ("chat", "again"): lambda a: self.start_chat(a),
-            # CHAT MODE pause - will not prompt the AI
-            ("pause", "chat"): lambda a: self.pause_chat(a),
-            ("have", "pause"): lambda a: self.pause_chat(a),
-            ("stop", "chat"): lambda a: self.pause_chat(a),
-            # Interruption commands
-            ("wait", "stop"): lambda a: self.interrupt_assistant(a),
-            ("wait", "wait"): lambda a: self.interrupt_assistant(a),
-            ("stop", "stop"): lambda a: self.interrupt_assistant(a),
-            ("ok", "thanks"): lambda a: self.interrupt_assistant(a),
-            ("thank", "you"): lambda a: self.interrupt_assistant(a),
-            ("hold", "on"): lambda a: self.interrupt_assistant(a),
-            ("all", "right"): lambda a: self.interrupt_assistant(a),
-            ("okay", "okay"): lambda a: self.interrupt_assistant(a),
+            (  # CHAT MODE enter, to prompt the AI
+                ("start", "chat"),
+                ("resume", "chat"),
+                ("chat", "again"),
+                ("enter", "chat"),
+                ("return", "chat"),
+                ("switch", "chat"),
+                ("open", "chat"),
+                ("back", "to", "chat"),
+                ("activate", "chat"),
+                ("chat", "please")
+            ): lambda a: self.start_chat(a),
+
+            (  # CHAT MODE pause, AI will not be prompted
+                ("pause", "chat"),
+                ("have", "pause"),
+                ("stop", "chat"),
+                ("end", "chat"),
+                ("hold", "chat"),
+                ("disable", "chat"),
+                ("turn", "off", "chat"),
+                ("pause", "conversation"),
+                ("stop", "conversation"),
+                ("halt", "chat"),
+                ("pause", "for", "now")
+            ): lambda a: self.pause_chat(a),
+
+            (  # Interruption commands for ongoing speeches
+                ("wait", "stop"),
+                ("wait", "wait"),
+                ("stop", "stop"),
+                ("ok", "thanks"),
+                ("thank", "you"),
+                ("hold", "on"),
+                ("all", "right"),
+                ("okay", "okay"),
+                ("stop", "it"),
+                ("wait", "up"),
+                ("hold", "up"),
+                ("stop", "please"),
+                ("pause", "now"),
+                ("okay", "stop"),
+                ("thanks", "anyway"),
+                ("forget", "it"),
+                ("leave", "it"),
+                ("not", "now"),
+                ("no", "thanks"),
+                ("all", "done"),
+                ("that", "is", "enough"),
+                ("it's", "okay"),
+                ("alright", "then"),
+                ("wait", "please"),
+                ("never", "mind"),
+                ("stop", "that"),
+                ("enough", "now"),
+                ("move", "on"),
+                ("just", "stop"),
+            ): lambda a: self.interrupt_assistant(a),
 
             ("read", "this"): lambda a: self.read_selected_text(a),
             ("explain", "this"): lambda a: self.explain_selected_text(a),
             ("summarize", "this"): lambda a: self.summarize_selected_text(a),
             ("summary", "of", "this"): lambda a: self.summarize_selected_text(a),
 
+            ("describe", "images"): lambda a: self.process_images(a),
+
+            # TODO: specific function for translation to handle translate to and get the next token as language etc...
             ("translate", "to", "english"): lambda a: self.translate_selected_text(a, 'en'),
             ("translate", "into", "english"): lambda a: self.translate_selected_text(a, 'en'),
             ("translate", "to", "french"): lambda a: self.translate_selected_text(a, 'fr'),
@@ -100,6 +158,7 @@ class VoiceApp(QObject):
             ("translate", "into", "spanish"): lambda a: self.translate_selected_text(a, 'es'),
             ("translate", "to", "chinese"): lambda a: self.translate_selected_text(a, 'zh'),
             ("translate", "into", "chinese"): lambda a: self.translate_selected_text(a, 'zh'),
+
             ("exit", "app"): lambda a: self.exit_app(a),
         }
 
@@ -122,11 +181,12 @@ class VoiceApp(QObject):
             ("undo", "please"): lambda a: self.edit_action("ctrl+z", "Undo."),
             ("redo", "please"): lambda a: self.edit_action("ctrl+shift+z", "Redo."),
 
-            # EDIT MODE exit - Will NOT run edit commands
-            ("exit", "editing"): lambda a: self.deactivate_write_mode(a),
-            ("close", "editing"): lambda a: self.deactivate_write_mode(a),
-            ("stop", "editing"): lambda a: self.deactivate_write_mode(a),
-            ("stop", "stop"): lambda a: self.deactivate_write_mode(a),
+            (  # EDIT MODE exit - Will NOT run edit commands
+                ("exit", "editing"),
+                ("close", "editing"),
+                ("stop", "editing"),
+                ("stop", "stop")
+            ): lambda a: self.deactivate_write_mode(a),
 
             ("translate", "to", "english"): lambda a: self.edit_translate_text(a, 'en'),
             ("translate", "into", "english"): lambda a: self.edit_translate_text(a, 'en'),
@@ -172,15 +232,15 @@ class VoiceApp(QObject):
             bool: True if `searched_tokens` exists in `tokens` as a consecutive subsequence, False otherwise.
         """
         token_count = len(searched_tokens)
+        # Command is length is greater than the tokens length
         if token_count == 0 or token_count > len(tokens):
             return False
-
         # Use zip to slide over the tokens
         for idx, token_window in enumerate(zip(*[tokens[i:] for i in range(token_count)])):
             if tuple(token_window) == searched_tokens:
                 self.logger.debug(f"[APP] Match found at index {idx}: {token_window} == {searched_tokens}")
                 return True
-
+        # No command match
         return False
 
     def process_command(self, spoken, clean, tokens, addresses_assistant):
@@ -215,22 +275,41 @@ class VoiceApp(QObject):
 
         prompt = self.speech_processor.restore_punctuation(spoken)
         self.logger.debug(f"[APP] Prompting AI Assistant with: {prompt} ...")
-        response = self.get_ai_response(prompt)
+
+
+        response = self.get_ai_response(Prompt(prompt))
         if response:
             self.assistant_speaking = True
             self.agent_speak(response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def handle_commands(self, tokens, commands, for_assistant=None):
+        """
+        Handle commands and return True if a command was handled.
 
-        self.logger.debug(f"[APP] for_assistant: {for_assistant}, self.chat_mode: {self.chat_mode}, ...")
+        Args:
+            tokens (list[str]): A list of tokens extracted from the spoken text.
+            commands (dict): A dictionary where keys are command patterns
+                             (tuple or tuple of tuples) and values are functions (actions).
+            for_assistant (optional): Context for the assistant, passed to the action.
 
-        """Handle commands and return True if a command was handled."""
+        Returns:
+            bool: True if a command was executed, False otherwise.
+        """
+        self.logger.debug(f"[APP] for_assistant: {for_assistant}, self.chat_mode: {self.chat_mode}")
         for command_tokens, action in commands.items():
-            # self.debug_match_commands(tokens, command_tokens)
-            if self.is_command(tokens, command_tokens):
-                action(for_assistant)
-                return True  # Command was handled
-        return False  # No command was recognized
+            # Normalize the command_tokens to always be a tuple of command combos
+            command_combos = (
+                command_tokens if isinstance(command_tokens[0], tuple) else (command_tokens,)
+            )
+
+            # Check each command combination against the input tokens
+            for command_combo in command_combos:
+                if self.is_command(tokens, command_combo):  # Match individual tuple
+                    # Execute the action function associated with the command combo
+                    action(for_assistant)
+                    return True
+        # No command was recognized
+        return False
 
     def debug_match_commands(self, tokens, command_tokens):
         self.logger.debug(
@@ -262,7 +341,6 @@ class VoiceApp(QObject):
         if not self.chat_mode:
             self.agent_speak("Chat resumed!", after_color=self.INITIAL)
             self.chat_mode = True
-            self.assistant.history_manager.clean()
             self.logger.debug("[APP] Chat mode resumed.")
             return
         self.agent_speak("Chat mode is already active!")
@@ -272,6 +350,7 @@ class VoiceApp(QObject):
         with Attention(is_for_assistant, "pause_chat()", self.logger):
             if self.chat_mode:
                 self.agent_speak("Chat paused!", after_color=self.PAUSED)
+                self.assistant.history_mng.clean()
                 self.chat_mode = False
                 self.logger.debug("[APP] Chat mode paused.")
                 return
@@ -281,7 +360,7 @@ class VoiceApp(QObject):
         """Handle 'stop' or 'hold on' commands."""
         if self.assistant_speaking or is_for_assistant:
             try:
-                self.speech_processor.stop_sound()
+                # self.speech_processor.stop_sound()
                 self.ball_reset_colorized()
                 self.speech_processor.wait(100)
                 self.logger.debug("[APP] Assistant IS speaking, <STOPPING> ...")
@@ -305,6 +384,14 @@ class VoiceApp(QObject):
             self.ball_change_color(self.OPERATING_TEXT)
             self.agent_speak(text, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
+    def process_images(self, is_for_assistant, lang="en"):
+        with Attention(is_for_assistant, "explain_selected_text()", self.logger):
+            prompt = Prompt("Please describe the images.")
+            prompt.images = ["./samples/image1.jpg", "./samples/image2.jpg"]
+            prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
+            ai_response = self.get_ai_response(prompt)
+            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+
     def explain_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""
         with Attention(is_for_assistant, "explain_selected_text()", self.logger):
@@ -313,11 +400,10 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Explain this: `{copied_text}`"
-            ai_response = self.get_ai_response(prompt, lang=lang)
+            ai_response = self.get_ai_response(Prompt(f"Please explain this:\n`{copied_text}`"))
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
-    def summarize_selected_text(self, is_for_assistant, lang="en"):
+    def summarize_selected_text(self, is_for_assistant):
         """Summarize the selected text."""
         with Attention(is_for_assistant, "explain_selected_text()", self.logger):
             self.read_unique(ACKNOWLEDGEMENTS)
@@ -325,8 +411,8 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Summarize `{copied_text}`. Output only the plain text, in a single line, without any formatting or additional comments."
-            ai_response = self.get_ai_response(prompt, lang=lang)
+            prompt = f"Please summarize this:\n `{copied_text}`"
+            ai_response = self.get_ai_response(Prompt(prompt))
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def translate_selected_text(self, is_for_assistant, lang="en"):
@@ -377,73 +463,38 @@ class VoiceApp(QObject):
         self.previous_expression = self.utils.get_unique_choice(expression_list, self.previous_expression)
         self.agent_speak(self.previous_expression, speaking_color=speaking_color, after_color=after_color, do_not_interrupt=do_not_interrupt)
 
-    def get_ai_response(self, spoken_prompt, colour=GENERATING, entertain=True, lang="en", context_free=False):
+    def get_ai_response(self, user_prompt: Prompt, colour=GENERATING, entertain=True, context_free=False):
         """
-        Will change the color of the ball, start pulsating on the rhythm of the text token responses from the model.
-        Will also progressively print in the console the full response from the AI model.
-        Once the response from the AI model is received, it will be spoken out loud.
+        Fetch the AI Response while managing the ball and optionally entertaining the user periodically.
+
+        Args:
+            user_prompt: The user's input prompt.
+            colour: The colour of the ball during processing.
+            entertain: Whether to entertain the user during generation.
+            lang: Language for AI responses.
+            context_free: Disable context-based responses.
         """
-        self.logger.info(f"(*) [USER] Says to AI Assistant: \"{spoken_prompt}\"")
+        self.logger.info(f"(*) [USER] Says to AI Assistant: \"{user_prompt.message}\"")
         self.ball_change_color(colour)
         self.read_unique(SHORT_CONFIRMS)
-
-        last_update_time, random_interval = self._initialize_time() if entertain else (None, None)
+        entertainer = Entertain(action=lambda: self.read_unique(WAITING_SOUNDS), should_entertain=entertain)
+        response_iter = self.assistant.get_response(user_prompt, context_free=context_free)
         response = ""
-        response_iter = self.assistant.get_response(spoken_prompt, context_free=context_free)
 
-        # AI will generate the response ...
-        self.logger_instance.pause()
-        print(f"[APP][AI_ASSISTANT][REAL_TIME_RESPONSE] (*) >>>")
-
-        # partial prompt results
+        self.logger.pause()
+        print("[APP][AI_ASSISTANT][REAL_TIME_RESPONSE] (*) >>>")
         for partial_response in response_iter:
-            # Handle cases where partial_response is not a string
-            if isinstance(partial_response, list):
-                # Convert list to a space-joined string
-                partial_response = " ".join(str(item) for item in partial_response)
-            elif not isinstance(partial_response, str):
-                # Fallback: Convert non-string types to a string
-                partial_response = str(partial_response)
+            response += partial_response
+            print(self.utils.clean_new_lines(partial_response), end="", flush=True)
+            entertainer.check_and_entertain()
+        print("\n", flush=True)
+        self.logger.resume()
 
-            # Process the string `partial_response`
-            response, diff = self._update_response(response, partial_response.replace("\n", ""), zoom=True)
-            diff = diff.replace("\n", "")
-            print(f"{diff}", end="", flush=True)
-
-            # Entertain periodically
-            if entertain and time.time() - last_update_time >= random_interval:
-                last_update_time, random_interval = self.entertain(last_update_time, random_interval)
-
-        print(f"\n", flush=True)
-
-        ai_response = self.utils.clean_response(response)
-        self.logger_instance.resume()
-        self.logger.debug(f"[APP][AI_ASSISTANT] Response: {response}")
-        self.logger.debug(f"[APP][AI_ASSISTANT] Response cleaned: {ai_response}")
-        self.assistant.history_manager.add(ai_response, role="assistant")
-        return ai_response
-
-    def entertain(self, min_interval=2, max_interval=5):
-        self.read_unique(WAITING_SOUNDS)
-        last_update_time, random_interval = self._initialize_time(min_interval, max_interval)
-        return last_update_time, random_interval
-
-    @staticmethod
-    def _initialize_time(min_interval=2, max_interval=5):
-        """Initialize and return the starting time and a random interval."""
-        last_update_time = time.time()
-        random_interval = random.uniform(min_interval, max_interval)
-        return last_update_time, random_interval
-
-    def _update_response(self, response, partial_response, zoom=True):
-        """Update the response with the latest partial data and print any new tokens."""
-        diff = ""
-        if response != partial_response:
-            diff = partial_response.replace(response, "")
-            response += diff
-            if diff and zoom:
-                self.ball_zoom_effect()
-        return response, diff
+        self.logger.debug(f"[APP][AI_ASSISTANT] Raw response: {response}")
+        clean_ai_response = self.utils.deep_text_clean(response)
+        self.logger.debug(f"[APP][AI_ASSISTANT] Cleaned response: {clean_ai_response}")
+        self.assistant.history_mng.add(user_prompt.message, clean_ai_response)
+        return clean_ai_response
 
     # --------------------- Energy ball related ----------------------------
 
