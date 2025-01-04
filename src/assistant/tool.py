@@ -1,7 +1,7 @@
 from itertools import chain
 from app_logger import AppLogger
-from assistantm.intent import DetectionResult, GENERIC_INTENTS, Intent
-from assistantm.tools import DateTimeTool, get_tools_summary, PythonExecutionTool, WikipediaTool
+from assistant.intent import DetectionResult, GENERIC_INTENTS, Intent
+from assistant.tools import DateTimeTool, get_tools_summary, PythonExecutionTool, WikipediaTool
 from prompt import Prompt
 
 

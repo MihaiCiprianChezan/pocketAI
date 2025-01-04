@@ -9,7 +9,7 @@ import traceback
 from better_profanity import profanity
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
-from assistantm.assistant import Assistant
+from assistant.assistant import Assistant
 from atention import Attention
 from energy_ball import EnergyBall
 from entertain import Entertain
@@ -18,6 +18,7 @@ from utils import *
 from varstore import *
 from translation import TranslationService
 from prompt import Prompt
+from commands import *
 
 
 class VoiceApp(QObject):
@@ -40,7 +41,7 @@ class VoiceApp(QObject):
 
     def __init__(self):
         super().__init__()
-        self.logger_instance = AppLogger(file_name="VoiceUtilApp.log", overwrite=True, log_level=logging.DEBUG)
+        self.logger_instance = AppLogger(file_name="AI_Assistant_Application.log", overwrite=True, log_level=logging.DEBUG)
         self.logger = self.logger_instance
         self.speech_processor = SpeechProcessorTTSX3()
         self.assistant = Assistant()
@@ -62,153 +63,56 @@ class VoiceApp(QObject):
         self.general_commands = self.init_commands()
         self.write_commands = self.init_write_commands()
 
-        self.prompt = Prompt("")
-
     def init_commands(self):
         # a:bool = prompt is Addressing Assistant
         # TODO: lists for similar commands...
         return {
-            (  # EDIT MODE enter - Will run edit commands
-                ("editing", "mode"),
-                ("enter", "editing"),
-                ("editing", "please"),
-                ("start", "editing"),
-                ("enable", "editing"),
-                ("switch", "editing"),
-                ("go", "editing"),
-                ("write", "mode"),
-                ("activate", "editing"),
-                ("turn", "on", "editing")
-            ): lambda a: self.activate_write_mode(a),
-
-            (  # CHAT MODE enter, to prompt the AI
-                ("start", "chat"),
-                ("resume", "chat"),
-                ("chat", "again"),
-                ("enter", "chat"),
-                ("return", "chat"),
-                ("switch", "chat"),
-                ("open", "chat"),
-                ("back", "to", "chat"),
-                ("activate", "chat"),
-                ("chat", "please")
-            ): lambda a: self.start_chat(a),
-
-            (  # CHAT MODE pause, AI will not be prompted
-                ("pause", "chat"),
-                ("have", "pause"),
-                ("stop", "chat"),
-                ("end", "chat"),
-                ("hold", "chat"),
-                ("disable", "chat"),
-                ("turn", "off", "chat"),
-                ("pause", "conversation"),
-                ("stop", "conversation"),
-                ("halt", "chat"),
-                ("pause", "for", "now")
-            ): lambda a: self.pause_chat(a),
-
-            (  # Interruption commands for ongoing speeches
-                ("wait", "stop"),
-                ("wait", "wait"),
-                ("stop", "stop"),
-                ("ok", "thanks"),
-                ("thank", "you"),
-                ("hold", "on"),
-                ("all", "right"),
-                ("okay", "okay"),
-                ("stop", "it"),
-                ("wait", "up"),
-                ("hold", "up"),
-                ("stop", "please"),
-                ("pause", "now"),
-                ("okay", "stop"),
-                ("thanks", "anyway"),
-                ("forget", "it"),
-                ("leave", "it"),
-                ("not", "now"),
-                ("no", "thanks"),
-                ("all", "done"),
-                ("that", "is", "enough"),
-                ("it's", "okay"),
-                ("alright", "then"),
-                ("wait", "please"),
-                ("never", "mind"),
-                ("stop", "that"),
-                ("enough", "now"),
-                ("move", "on"),
-                ("just", "stop"),
-            ): lambda a: self.interrupt_assistant(a),
-
-            ("read", "this"): lambda a: self.read_selected_text(a),
-            ("explain", "this"): lambda a: self.explain_selected_text(a),
-            ("summarize", "this"): lambda a: self.summarize_selected_text(a),
-            ("summary", "of", "this"): lambda a: self.summarize_selected_text(a),
-
-            ("describe", "images"): lambda a: self.process_images(a),
-
-            # TODO: specific function for translation to handle translate to and get the next token as language etc...
-            ("translate", "to", "english"): lambda a: self.translate_selected_text(a, 'en'),
-            ("translate", "into", "english"): lambda a: self.translate_selected_text(a, 'en'),
-            ("translate", "to", "french"): lambda a: self.translate_selected_text(a, 'fr'),
-            ("translate", "into", "french"): lambda a: self.translate_selected_text(a, 'fr'),
-            ("translate", "to", "german"): lambda a: self.translate_selected_text(a, 'de'),
-            ("translate", "into", "german"): lambda a: self.translate_selected_text(a, 'de'),
-            ("translate", "to", "spanish"): lambda a: self.translate_selected_text(a, 'es'),
-            ("translate", "into", "spanish"): lambda a: self.translate_selected_text(a, 'es'),
-            ("translate", "to", "chinese"): lambda a: self.translate_selected_text(a, 'zh'),
-            ("translate", "into", "chinese"): lambda a: self.translate_selected_text(a, 'zh'),
-
-            ("exit", "app"): lambda a: self.exit_app(a),
+            ENTER_EDIT_MODE: lambda a: self.activate_write_mode(a),
+            ENTER_CHAT_MODE: lambda a: self.start_chat(a),
+            PAUSE_CHAT_MODE: lambda a: self.pause_chat(a),
+            INTERRUPT_ASSISTANT: lambda a: self.interrupt_assistant(a),
+            READ_THIS: lambda a: self.read_selected_text(a),
+            EXPLAIN_THIS: lambda a: self.explain_selected_text(a),
+            SUMMARIZE_THIS: lambda a: self.summarize_selected_text(a),
+            ("describe", "images"): lambda a: self.describe_images(a),
+            ("describe", "video"): lambda a: self.describe_video(a),
+            TRANSLATE_TO_ENGLISH: lambda a: self.translate_selected_text(a, 'en'),
+            TRANSLATE_TO_FRENCH: lambda a: self.translate_selected_text(a, 'fr'),
+            TRANSLATE_TO_GERMAN: lambda a: self.translate_selected_text(a, 'de'),
+            TRANSLATE_TO_SPANISH: lambda a: self.translate_selected_text(a, 'es'),
+            TRANSLATE_TO_CHINESE: lambda a: self.translate_selected_text(a, 'zh'),
+            EXIT: lambda a: self.exit_app(a),
         }
 
     def init_write_commands(self):
-        # TODO: Maybe translate inline text, correct text, chat inline in the text.
         return {
-            ("new", "line"): lambda a: self.edit_action("enter", "New line."),
-            ("copy", "text"): lambda a: self.edit_action("ctrl+c", "Copied."),
-            ("paste", "text"): lambda a: self.edit_action("ctrl+v", "Pasted."),
-            ("cut", "text"): lambda a: self.edit_action("ctrl+x", "Cut."),
-            ("delete", "text"): lambda a: self.edit_action("delete", "Deleted."),
-            ("select", "all"): lambda a: self.edit_action("ctrl+a", "Selected all."),
-            ("select", "word"): lambda a: self.edit_action("ctrl+shift+left", "Selected word."),
-            ("select", "line"): lambda a: self.edit_action("ctrl+shift+down", "Selected line."),
-            ("select", "paragraph"): lambda a: self.edit_action("ctrl+shift+up", "Selected paragraph."),
-            ("move", "up"): lambda a: self.edit_action("up", "Up."),
-            ("move", "down"): lambda a: self.edit_action("down", "Down."),
-            ("move", "left"): lambda a: self.edit_action("left", "Left."),
-            ("move", "right"): lambda a: self.edit_action("right", "Right."),
-            ("undo", "please"): lambda a: self.edit_action("ctrl+z", "Undo."),
-            ("redo", "please"): lambda a: self.edit_action("ctrl+shift+z", "Redo."),
-
-            (  # EDIT MODE exit - Will NOT run edit commands
-                ("exit", "editing"),
-                ("close", "editing"),
-                ("stop", "editing"),
-                ("stop", "stop")
-            ): lambda a: self.deactivate_write_mode(a),
-
-            ("translate", "to", "english"): lambda a: self.edit_translate_text(a, 'en'),
-            ("translate", "into", "english"): lambda a: self.edit_translate_text(a, 'en'),
-            ("translate", "to", "french"): lambda a: self.edit_translate_text(a, 'fr'),
-            ("translate", "into", "french"): lambda a: self.edit_translate_text(a, 'fr'),
-            ("translate", "to", "german"): lambda a: self.edit_translate_text(a, 'de'),
-            ("translate", "into", "german"): lambda a: self.edit_translate_text(a, 'de'),
-            ("translate", "to", "spanish"): lambda a: self.edit_translate_text(a, 'es'),
-            ("translate", "into", "spanish"): lambda a: self.edit_translate_text(a, 'es'),
-            ("translate", "to", "chinese"): lambda a: self.edit_translate_text(a, 'zh'),
-            ("translate", "into", "chinese"): lambda a: self.edit_translate_text(a, 'zh'),
+            NEW_LINE: lambda a: self.edit_action("enter", "New line."),
+            COPY_TEXT: lambda a: self.edit_action("ctrl+c", "Copied."),
+            PASTE_TEXT: lambda a: self.edit_action("ctrl+v", "Pasted."),
+            CUT_TEXT: lambda a: self.edit_action("ctrl+x", "Cut."),
+            DELETE_TEXT: lambda a: self.edit_action("delete", "Deleted."),
+            SELECT_ALL: lambda a: self.edit_action("ctrl+a", "Selected all."),
+            SELECT_WORD: lambda a: self.edit_action("ctrl+shift+left", "Selected word."),
+            SELECT_LINE: lambda a: self.edit_action("ctrl+shift+down", "Selected line."),
+            SELECT_PARAGRAPH: lambda a: self.edit_action("ctrl+shift+up", "Selected paragraph."),
+            MOVE_UP: lambda a: self.edit_action("up", "Up."),
+            MOVE_DOWN: lambda a: self.edit_action("down", "Down."),
+            MOVE_LEFT: lambda a: self.edit_action("left", "Left."),
+            MOVE_RIGHT: lambda a: self.edit_action("right", "Right."),
+            UNDO: lambda a: self.edit_action("ctrl+z", "Undo."),
+            REDO: lambda a: self.edit_action("ctrl+shift+z", "Redo."),
+            EXIT_EDIT_MODE: lambda a: self.deactivate_write_mode(a),
+            TRANSLATE_TO_ENGLISH: lambda a: self.edit_translate_text(a, 'en'),
+            TRANSLATE_TO_FRENCH: lambda a: self.edit_translate_text(a, 'fr'),
+            TRANSLATE_TO_GERMAN: lambda a: self.edit_translate_text(a, 'de'),
+            TRANSLATE_TO_SPANISH: lambda a: self.edit_translate_text(a, 'es'),
+            TRANSLATE_TO_CHINESE: lambda a: self.edit_translate_text(a, 'zh'),
         }
 
     def edit_action(self, keys, confirmation=""):
         keyboard.send(keys)
         if confirmation:
             self.agent_speak(confirmation)
-
-    # def paste_copied(self, confirmation):
-    #     self.utils.paste_at_cursor()
-    #     if confirmation:
-    #         self.agent_speak(confirmation)
 
     def is_for_assistant(self, spoken, clean):
         return any(variant in clean or variant in spoken.lower() for variant in self.name_variants)
@@ -275,7 +179,6 @@ class VoiceApp(QObject):
 
         prompt = self.speech_processor.restore_punctuation(spoken)
         self.logger.debug(f"[APP] Prompting AI Assistant with: {prompt} ...")
-
 
         response = self.get_ai_response(Prompt(prompt))
         if response:
@@ -384,11 +287,19 @@ class VoiceApp(QObject):
             self.ball_change_color(self.OPERATING_TEXT)
             self.agent_speak(text, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
-    def process_images(self, is_for_assistant, lang="en"):
-        with Attention(is_for_assistant, "explain_selected_text()", self.logger):
+    def describe_images(self, is_for_assistant):
+        with Attention(is_for_assistant, "process_images()", self.logger):
             prompt = Prompt("Please describe the images.")
             prompt.images = ["./samples/image1.jpg", "./samples/image2.jpg"]
             prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
+            ai_response = self.get_ai_response(prompt)
+            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+
+    def describe_video(self, is_for_assistant):
+        with Attention(is_for_assistant, "process_images()", self.logger):
+            prompt = Prompt("Please describe video, what is the red panda doing?")
+            prompt.video = "./samples/red-panda.mp4"
+            prompt.video_prefix, prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_video_pixel_values(prompt.video)
             ai_response = self.get_ai_response(prompt)
             self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
@@ -471,24 +382,46 @@ class VoiceApp(QObject):
             user_prompt: The user's input prompt.
             colour: The colour of the ball during processing.
             entertain: Whether to entertain the user during generation.
-            lang: Language for AI responses.
             context_free: Disable context-based responses.
         """
         self.logger.info(f"(*) [USER] Says to AI Assistant: \"{user_prompt.message}\"")
         self.ball_change_color(colour)
         self.read_unique(SHORT_CONFIRMS)
+
+        # Create the entertainer
         entertainer = Entertain(action=lambda: self.read_unique(WAITING_SOUNDS), should_entertain=entertain)
+
+        # Thread to run the entertainer
+        def entertain_in_background():
+            while entertainer.should_entertain:
+                entertainer.check_and_entertain()
+                self.speech_processor.wait(100)
+
+        # Start entertain thread if entertain=True
+        entertain_thread = None
+        if entertain:
+            entertain_thread = threading.Thread(target=entertain_in_background, daemon=True)
+            entertain_thread.start()
+
+        # AI response fetching loop
         response_iter = self.assistant.get_response(user_prompt, context_free=context_free)
         response = ""
 
         self.logger.pause()
         print("[APP][AI_ASSISTANT][REAL_TIME_RESPONSE] (*) >>>")
+
         for partial_response in response_iter:
             response += partial_response
             print(self.utils.clean_new_lines(partial_response), end="", flush=True)
-            entertainer.check_and_entertain()
+
         print("\n", flush=True)
         self.logger.resume()
+
+        # Stop the entertainer
+        if entertain:
+            entertainer.should_entertain = False
+            if entertain_thread:
+                entertain_thread.join()
 
         self.logger.debug(f"[APP][AI_ASSISTANT] Raw response: {response}")
         clean_ai_response = self.utils.deep_text_clean(response)

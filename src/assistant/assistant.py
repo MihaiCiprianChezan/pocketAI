@@ -1,8 +1,8 @@
 from app_logger import AppLogger
-from assistantm.chat import ChatManager
-from assistantm.history import HistoryManager
-from assistantm.model import ModelManager
-from assistantm.tool import ToolManager
+from assistant.chat import ChatManager
+from assistant.history import HistoryManager
+from assistant.model import ModelManager
+from assistant.tool import ToolManager
 from similarity import Similarity
 from utils import INTERN_VL_2_5_2B
 

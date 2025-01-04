@@ -28,9 +28,9 @@ class HistoryManager:
                 if len(target_history) == self.history_size:
                     target_history = target_history[1:]
                 target_history.append(history_entry)
-                self.logger.error(f"[HistoryManager] Added history entry: {history_entry}")
+                self.logger.debug(f"[HistoryManager] Added history entry: {history_entry}")
             except Exception as e:
-                self.logger.error(f"[HistoryManager] Error adding message to history: {e}, {traceback.format_exc()}")
+                self.logger.debug(f"[HistoryManager] Error adding message to history: {e}, {traceback.format_exc()}")
             finally:
                 return target_history
 
