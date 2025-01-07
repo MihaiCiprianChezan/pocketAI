@@ -6,12 +6,12 @@ from PySide6.QtGui import QAction, QColor, QMouseEvent, QMovie, QPainter
 from PySide6.QtWidgets import QApplication, QGraphicsColorizeEffect, QLabel, QMenu, QMessageBox, QVBoxLayout, QWidget
 
 from app_logger import AppLogger
-from rectangle_select import RectangleOverlay
 
 
 class EnergyBall(QWidget):
     def __init__(self, gif_path="./images/opti100.gif"):
         super().__init__()
+        self.name = self.__class__.__name__
         self.logger = AppLogger()
         self.circle_color = QColor(0, 0, 0, 180)
         # Configure the transparent, frameless overlay window
@@ -40,7 +40,6 @@ class EnergyBall(QWidget):
         self.animation_lock = QMutex()
         # Initialize position
         self.init_position()
-        self.rectangle_overlay = RectangleOverlay()
 
     def receive_command(self, command, params):
         if command == "reset_colorized":
@@ -55,6 +54,8 @@ class EnergyBall(QWidget):
             self.zoom_effect_wrapper(command, params)
         elif command == "rectangle_selection":
             self.rectangle_selection(command, params)
+        elif command == "rectangle_selection_timeout":
+            self.rectangle_selection_timeout(command, params)
         elif command == "exit":
             QCoreApplication.quit()
 
@@ -85,9 +86,23 @@ class EnergyBall(QWidget):
         duration = params.get("duration", 100)
         self.zoom_effect(duration, zoom_factor)
 
-    # Slot to handle zoom effect
+    # Slot to handle screeshot
     def rectangle_selection(self, command, params={}):
-        self.rectangle_overlay.show()
+        rect = params.get("RectangleOverlay", None)
+        if rect:
+            self.logger.debug(f"[{self.name}] Initializing rectangle selection using RectangleOverlay attribute")
+            params['RectangleOverlay'].show()
+        else:
+            self.logger.debug(f"[{self.name}] RectangleOverlay attribute not found. Cannot initialize rectangle selection.")
+
+    # Slot to handle screeshot hide
+    def rectangle_selection_timeout(self, command, params={}):
+        rect = params.get("RectangleOverlay", None)
+        if rect:
+            self.logger.debug(f"[{self.name}] Initializing rectangle selection using RectangleOverlay attribute")
+            params['RectangleOverlay'].hide()
+        else:
+            self.logger.debug(f"[{self.name}] RectangleOverlay attribute not found. Cannot initialize rectangle selection.")
 
     def show_context_menu(self, position):
         """
@@ -156,7 +171,7 @@ class EnergyBall(QWidget):
                     try:
                         color_effect.setStrength(strength)
                     except RuntimeError:
-                        self.logger.debug("[DEBUG] QGraphicsColorizeEffect already deleted during animation.")
+                        self.logger.debug(f"[{self.name}] QGraphicsColorizeEffect already deleted during animation.")
 
             self.color_animation.valueChanged.connect(update_strength)
 
@@ -164,9 +179,9 @@ class EnergyBall(QWidget):
             def on_animation_complete():
                 if color_effect:
                     try:
-                        self.logger.debug(f"[DEBUG] Transition to {target_color} complete.")
+                        self.logger.debug(f"[{self.name}] Transition to {target_color} complete.")
                     except RuntimeError:
-                        self.logger.debug("[DEBUG] QGraphicsColorizeEffect already deleted at animation completion.")
+                        self.logger.debug(f"[{self.name}] QGraphicsColorizeEffect already deleted at animation completion.")
 
             self.color_animation.finished.connect(on_animation_complete)
 
@@ -321,10 +336,10 @@ class EnergyBall(QWidget):
             self.pulsating = False
             if hasattr(self, "pulse_timer"):
                 self.pulse_timer.stop()
-                self.logger.debug("[ENERGY] Pulsating stopped.")
+                self.logger.debug(f"[{self.name}] Pulsating stopped.")
             return  # Exit if we are stopping pulsating
         # Initialize pulsating effect
-        self.logger.debug("[ENERGY] Pulsating started.")
+        self.logger.debug(f"[{self.name}] Pulsating started.")
         self.pulsating = True
         # Create a timer for random intervals
         if not hasattr(self, "pulse_timer"):
@@ -387,13 +402,13 @@ class EnergyBall(QWidget):
             self.label.setGraphicsEffect(None)  # Remove any color overlay
         elif event.key() == Qt.Key_9:  # Toggle pulsating effect
             self.pulsate_effect()  # New pulsating effect toggle
-            self.logger.debug("Pulsate toggle key detected!")  # Debugging output
+            self.logger.debug(f"[{self.name}] Pulsate toggle key detected!")  # Debugging output
         elif event.key() == Qt.Key_0:  # Zoom in and out
             self.zoom_effect()
-            self.logger.debug("Zoom key detected!")  # Debug
+            self.logger.debug(f"[{self.name}] Zoom key detected!")  # Debug
         elif event.key() == Qt.Key_Return:  # Zoom in and out
             self.stop_pulsating()
-            self.logger.debug("Stopping pulsating!")  # Debug
+            self.logger.debug(f"[{self.name}] Stopping pulsating!")  # Debug
         elif event.key() == Qt.Key_Escape:  # Exit
             self.close()
             QCoreApplication.quit()

@@ -41,14 +41,16 @@ class HistoryManager:
         self.clean_history = self.add_to(self.clean_history, user_message, assistant_message)
 
     def clean(self):
-        self.logger.error(f"[HistoryManager] >>> Cleaning history: {self.history}")
+        # self.logger.error(f"[HistoryManager] >>> Cleaning history: {self.history}")
         with self.history_lock:
             self.history = self.clean_history
-        self.logger.error(f"[HistoryManager] >>> History after cleaning: {self.history}")
+        # self.logger.error(f"[HistoryManager] >>> History after cleaning: {self.history}")
 
-    def empty(self):
+    def empty_clean(self):
+        self.logger.error(f"[HistoryManager] > Cleaning history: {self.history}")
         with self.history_lock:
             self.history = []
+        self.logger.error(f"[HistoryManager] > History after cleaning: {self.history}")
 
     def empty_all(self):
         with self.history_lock:

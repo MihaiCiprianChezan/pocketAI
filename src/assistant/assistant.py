@@ -44,12 +44,19 @@ class Assistant:
         self.model_mng.model.system_message = self.CONVERSATION
         self.model_mng.warm_model()
 
+    def clean_history(self):
+        self.history_mng.clean()
+        self.logger.error(f"[{self.name}] > Cleaning history: {self.history_mng.history}")
+        with self.history_mng.history_lock:
+            self.history_mng.history = []
+        self.logger.error(f"[{self.name}] > History after cleaning: {self.history_mng.history}")
+
     def regulate_history(self, message, context_free=False):
         self.logger.debug(f"[{self.name}] History before regulation: {self.history_mng.get_formated()}")
         if context_free:
             # TODO: Check if really needs to clear history ...
             self.logger.debug(f"[{self.name}] <CLEANING_HISTORY> because context_free=True.")
-            self.history_mng.clean()
+            self.history_mng.empty_clean()
         else:
             if len(self.history_mng.history) > 0:
                 # Make space in the history for new entries if history is full
@@ -79,9 +86,9 @@ class Assistant:
             return tool_result
 
         if user_prompt.images:
-            self.logger.debug(f"[{self.name}]  user_prompt.message: `{user_prompt.message}`")
-            self.logger.debug(f"[{self.name}]  user_prompt.pixel_values: `{user_prompt.pixel_values}`")
-            self.logger.debug(f"[{self.name}]  user_prompt.num_patches_list: `{user_prompt.num_patches_list}`")
+            # self.logger.debug(f"[{self.name}]  user_prompt.message: `{user_prompt.message}`")
+            # self.logger.debug(f"[{self.name}]  user_prompt.pixel_values: `{user_prompt.pixel_values}`")
+            # self.logger.debug(f"[{self.name}]  user_prompt.num_patches_list: `{user_prompt.num_patches_list}`")
 
             return self.chat_mng.stream_chat_image(
                 user_prompt.message,

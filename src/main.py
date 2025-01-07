@@ -24,6 +24,8 @@ from translation import TranslationService
 from utils import *
 from varstore import *
 from screenshot import ScreenshotUtil
+from rectangle_select import RectangleOverlay
+from wait_for_value import WaitForValue
 
 
 class ScreenCaptureThread(QThread):
@@ -37,7 +39,7 @@ class VoiceApp(QObject):
     # Define signals to communicate with the EnergyBall
     send_command_to_ball = Signal(str, dict)  # str: command, dict: optional parameters
 
-    NAME = "Opti"
+    ASSISTANT_NAME = "Opti"
     HELLO = YELLOW
     GENERATING = MAGENTA
     SPEAKING = BLUE
@@ -54,6 +56,7 @@ class VoiceApp(QObject):
 
     def __init__(self):
         super().__init__()
+        self.name = self.__class__.__name__
         self.logger_instance = AppLogger(file_name="AI_Assistant_Application.log", overwrite=True, log_level=logging.DEBUG)
         self.logger = self.logger_instance
         self.speech_processor = SpeechProcessorTTSX3()
@@ -61,6 +64,8 @@ class VoiceApp(QObject):
         self.assistant.initialize()
         self.utils = Utils()
         self.translations = TranslationService()
+        self.screenshot_util = ScreenshotUtil(self.logger)
+        self.rectangle_overlay = RectangleOverlay()
 
         self.recognized_speech_queue = Queue(1000)  # Shared queue for recognized speech
         self.speech_thread = None
@@ -72,12 +77,22 @@ class VoiceApp(QObject):
         self.assistant_speaking = False
         self.previous_expression = ""
         self.saluted = False
-        self.name_variants = [self.NAME.lower(), self.NAME.title(), self.NAME.upper()]
+
         self.general_commands = self.init_commands()
         self.write_commands = self.init_write_commands()
-        self.screen_capture_tool = None
-        self.screenshot_util = ScreenshotUtil(self.logger)
-        # self.rectangle_select = RectangleSelect()
+
+        self.rectangle_overlay.selected.connect(self.on_rectangle_selected)
+        self.rectangle_selected = None
+
+    def on_rectangle_selected(self, x, y, width, height):
+        """
+        Slot to handle rectangle selection signals, receives coordinates.
+        """
+        self.rectangle_selected = (x, y, width, height)
+        self.logger.debug(f"[{self.name}][on_rectangle_selected()] Rectangle Selected: x={x}, y={y}, width={width}, height={height}")
+
+    def get_name_variants(self):
+        return [self.ASSISTANT_NAME.lower(), self.ASSISTANT_NAME.title(), self.ASSISTANT_NAME.upper()]
 
     def init_commands(self):
         # a:bool = prompt is Addressing Assistant
@@ -137,11 +152,11 @@ class VoiceApp(QObject):
             self.agent_speak(confirmation)
 
     def is_for_assistant(self, spoken, clean):
-        return any(variant in clean or variant in spoken.lower() for variant in self.name_variants)
+        return any(variant in clean or variant in spoken.lower() for variant in self.get_name_variants())
 
     def clean_name(self, spoken, clean):
-        clean = clean.replace(self.NAME.lower(), "").strip()
-        for variant in self.name_variants:
+        clean = clean.replace(self.ASSISTANT_NAME.lower(), "").strip()
+        for variant in self.get_name_variants():
             spoken = spoken.replace(variant, "").strip()
         for_bot_attention = True
         return spoken, clean
@@ -312,18 +327,28 @@ class VoiceApp(QObject):
 
     def screen_capture(self, is_for_assistant):
         """Launch the integrated screen capture dialog."""
-        self.send_command_to_ball.emit("rectangle_selection", {})
-        # with Attention(is_for_assistant, "screen_capture()", self.logger):
-        #     formatted_time = datetime.datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
-        #     file_name = Path(f"screenshot_{uuid.uuid4().hex}_{formatted_time}.png")
-        #     dest_file = str(self.SCREENSHOT_FOLDER / file_name)
-        #     self.screenshot_util.capture(dest_file)
-        #     self.logger.debug(f"Screenshot saved at: {dest_file}")
-        #     prompt = Prompt("Please describe the screenshot.")
-        #     prompt.images = [dest_file]
-        #     prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
-        #     ai_response = self.get_ai_response(prompt, context_free=True)
-        #     self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        self.rectangle_selected = None
+        self.send_command_to_ball.emit("rectangle_selection",{'RectangleOverlay': self.rectangle_overlay})
+        self.agent_speak("Please select a screen area by dragging a rectangle with your mouse.", speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        try:
+            with WaitForValue(lambda: self.rectangle_selected, timeout=30) as result:
+                self.logger.debug(f"[{self.name}] Value received {result}, saving screenshot ...")
+                formatted_time = datetime.datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
+                file_name = Path(f"screenshot_{uuid.uuid4().hex}_{formatted_time}.png")
+                dest_file = str(self.SCREENSHOT_FOLDER / file_name)
+                self.screenshot_util.capture_partial(self.rectangle_selected, save_path=dest_file)
+                self.rectangle_selected = None
+                self.logger.debug(f"Screenshot saved at: {dest_file}")
+                prompt = Prompt("Please describe the screenshot.")
+                prompt.images = [dest_file]
+                prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
+                # self.logger.debug(f"Prompt: {prompt}")
+                ai_response = self.get_ai_response(prompt, context_free=True)
+                self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+                # TODO: clean screenshot and check and fix on double screenshot ...
+        except TimeoutError as e:
+            self.send_command_to_ball.emit("rectangle_selection_timeout",{'RectangleOverlay': self.rectangle_overlay})
+            self.agent_speak("The screenshot process timed out. Please try taking it faster next time, within 30 seconds.", speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def describe_images(self, is_for_assistant):
         with Attention(is_for_assistant, "process_images()", self.logger):
