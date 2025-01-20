@@ -9,7 +9,7 @@ import pyperclip
 from app_logger import AppLogger
 from varstore import EMOJIS_REGEX, GLITCHES, MULTIPLE_SPACES_REGEX, CHINESE_CHARACTERS_REGEX, KOREAN_CHARACTERS_REGEX, JAPANESE_CHARACTERS_REGEX
 
-HF_TOKEN = "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"
+HF_TOKEN = "hf_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 MODELS_DIR = Path(__file__).parent.parent / "models"
 ALL_MINI_LM_L6_V2 = str(MODELS_DIR / "all-MiniLM-L6-v2")
 VOSK_MODEL_SMALL_EN_US_0_15 = str(MODELS_DIR / "vosk-model-small-en-us-0.15")

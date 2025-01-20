@@ -244,7 +244,7 @@ class ChatManager:
             question = f"{image_prefix}{question}"
         return self.stream_chat(question, pixel_values=pixel_values, return_full_history=return_full_history, num_patches_list=num_patches_list)
 
-    def get_video_pixel_values(self, mp4_video_path: str, num_segments=8, max_num=1):
+    def get_video_pixel_values(self, mp4_video_path: str, num_segments=12, max_num=1):
         """ Load and preprocess video frames to be able to attach the video data in chats """
         pixel_values, num_patches_list = self.load_video(mp4_video_path, num_segments=num_segments, max_num=max_num)
         pixel_values = pixel_values.to(torch.float16).cuda()

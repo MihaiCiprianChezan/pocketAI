@@ -113,6 +113,18 @@ class VoiceApp(QObject):
                 ("take", "screenshot")
             ):lambda a: self.screen_capture(a),
 
+            (
+                ("describe", "screen", "area"),
+            ): lambda a: self.screen_capture(a),
+
+            (
+                ("describe", "video"),
+            ): lambda a: self.describe_video(a),
+
+            (
+                ("describe", "image"),
+            ): lambda a: self.describe_images(a),
+
             TRANSLATE_TO_ENGLISH: lambda a: self.translate_selected_text(a, 'en'),
             TRANSLATE_TO_FRENCH: lambda a: self.translate_selected_text(a, 'fr'),
             TRANSLATE_TO_GERMAN: lambda a: self.translate_selected_text(a, 'de'),
@@ -351,20 +363,40 @@ class VoiceApp(QObject):
             self.agent_speak("The screenshot process timed out. Please try taking it faster next time, within 30 seconds.", speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def describe_images(self, is_for_assistant):
-        with Attention(is_for_assistant, "process_images()", self.logger):
-            prompt = Prompt("Please describe the images.")
-            prompt.images = ["./samples/image1.jpg", "./samples/image2.jpg"]
-            prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
-            ai_response = self.get_ai_response(prompt)
-            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        try:
+            with Attention(is_for_assistant, "describe_images()", self.logger):
+                prompt = Prompt("Please describe the image(s).")
+                keyboard.send("shift+f10")
+                sleep(0.3)
+                keyboard.send("a")
+                sleep(0.3)
+                image = str(Path(pyperclip.paste().replace('"','')))
+                prompt.images = [ image ]
+                # prompt.images = ["./samples/image1.jpg", "./samples/image2.jpg"]
+                prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_image_pixel_values(prompt.images)
+                ai_response = self.get_ai_response(prompt, context_free=True)
+                self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        except Exception as e:
+            self.logger.error(f"[APP] Error describe_images: {e}, {traceback.format_exc()}")
+            self.agent_speak(f"I couldn't describe the image(s) because of an exception: {e}.", speaking_color=self.SPEAKING, after_color=self.INITIAL)
 
     def describe_video(self, is_for_assistant):
-        with Attention(is_for_assistant, "process_images()", self.logger):
-            prompt = Prompt("Please describe video, what is the red panda doing?")
-            prompt.video = "./samples/red-panda.mp4"
-            prompt.video_prefix, prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_video_pixel_values(prompt.video)
-            ai_response = self.get_ai_response(prompt)
-            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        try:
+            with Attention(is_for_assistant, "describe_video()", self.logger):
+                prompt = Prompt("Please summarize the whole video.")
+                keyboard.send("shift+f10")
+                sleep(0.3)
+                keyboard.send("a")
+                sleep(0.3)
+                prompt.video = str(Path(pyperclip.paste().replace('"','')))
+                # prompt.video = "./samples/red-panda.mp4"
+                prompt.video_prefix, prompt.pixel_values, prompt.num_patches_list = self.assistant.chat_mng.get_video_pixel_values(prompt.video)
+                ai_response = self.get_ai_response(prompt, context_free=True)
+                self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+        except Exception as e:
+            self.logger.error(f"[APP] Error describe_images: {e}, {traceback.format_exc()}")
+            self.agent_speak(f"I couldn't describe the image(s) because of an exception: {e}.", speaking_color=self.SPEAKING, after_color=self.INITIAL)
+
 
     def explain_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""

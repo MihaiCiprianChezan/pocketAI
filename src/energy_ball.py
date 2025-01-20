@@ -9,7 +9,7 @@ from app_logger import AppLogger
 
 
 class EnergyBall(QWidget):
-    def __init__(self, gif_path="./images/opti100.gif"):
+    def __init__(self, gif_path="./images/opti200.gif"):
         super().__init__()
         self.name = self.__class__.__name__
         self.logger = AppLogger()
