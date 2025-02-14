@@ -63,7 +63,7 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
 class InternVLModel:
-    def __init__(self, model_path, device="cuda"):
+    def __init__(self, model_path, device="cpu"):
         """
         Initialize the InternVLModel with specified model path and device.
 
@@ -242,7 +242,7 @@ class InternVLModel:
 
 if __name__ == "__main__":
     model_path = "OpenGVLab/InternVL2_5-2B"
-    internvl_model = InternVLModel(model_path=model_path, device="cuda")
+    internvl_model = InternVLModel(model_path=model_path, device="cpu")
 
     # Example 1: Text question
     text_question = "What is the nature of language models?"

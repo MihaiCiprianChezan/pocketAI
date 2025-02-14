@@ -30,18 +30,27 @@ class ModelManager:
                 torch_dtype=torch_dtype,
                 low_cpu_mem_usage=True,
                 local_files_only=True,
-                use_flash_attn=True,
+                use_flash_attn=False,
                 trust_remote_code=self.trust_remote_code,
-            ).eval().cuda()
+            ).eval().to(self.device)
+
+            torch.set_num_threads(min(8, torch.get_num_threads()))
+            torch.set_grad_enabled(False)
+
+            # self.model = torch.quantization.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint16)  # Apply dynamic quantization - model becomes to "narrow"
+            # self.model = torch.jit.script(self.model)  # the involved model is not TorchScript-compatible.
+
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 token=HF_TOKEN,
                 trust_remote_code=self.trust_remote_code,
                 attn_implementation=attn_implementation,
+                low_cpu_mem_usage=True,
+                local_files_only=True,
                 use_fast=True)
         except Exception as e:
-            self.logger.error(f"[{self.name}] Error loading model '{self.model_name}': {e}, {traceback.format_exc()}")
-            raise RuntimeError(f"[{self.name}] Failed to load model. Ensure the model exists and is properly configured.")
+            self.logger.error(f"[{self.name}] Error loading model `{self.model_name}`: {e}, {traceback.format_exc()}")
+            raise RuntimeError(f"[{self.name}] Failed to load model `{self.model_name}`. Ensure the model exists and is properly configured.")
 
     def get_attention(self):
         torch.backends.cudnn.benchmark = True

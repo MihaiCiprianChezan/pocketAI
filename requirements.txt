@@ -11,6 +11,14 @@ pygame>=2.0.0
 PySide6>=6.0.0
 gTTS>=2.3.0
 
+# PyTorch + TorchAudio + TorchVision
+# torch==2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+# torchvision==0.19.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+# torchaudio==-2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+torch==2.4.0
+torchvision==0.19.0
+torchaudio==2.4.0
+
 # Whisper and HuggingFace integration
 openai-whisper==20240930
 whisper>=0.1.4
@@ -18,22 +26,20 @@ transformers==4.47.1
 spaces==0.30.4
 accelerate==1.2.1
 
-# PyTorch + TorchAudio + TorchVision
-torch==2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
-torchvision==0.19.0+cu124 --index-url https://download.pytorch.org/whl/cu124
-torchaudio==-2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
-
 # Additional libraries
 better_profanity==0.7.0
 vosk==0.3.45
 fastpunct==2.0.2
 wikipedia==1.4.0
 better-profanity==0.7.0
-torch==2.4.0+cu124
 argostranslate==1.9.6
 langdetect==1.0.9
 einops==0.8.0
-flash-attn==2.5.9.post1
+#flash-attn==2.5.9.post1
 sentencepiece==0.2.0
 tokenizers==0.21.0
 lmdeploy==0.6.4
+pillow==11.1.0
+decord==0.6.0
+mistune==3.1.0
+beautifulsoup4==4.12.3

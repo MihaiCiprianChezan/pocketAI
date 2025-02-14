@@ -157,48 +157,53 @@ class ChatManager:
 
     def stream_chat(self, question, pixel_values=None, generation_config=None, num_patches_list=None, return_full_history=False):
         """
-        Streams the conversation based on the provided question and parameters using threaded execution.
-
-        Args:
-            question (str): The input question or text prompt to generate a response.
-            pixel_values (Optional[Any]): Optional visual input (e.g., tensor) associated with the question. Defaults to None.
-            generation_config (Optional[Any]): Configuration for text generation, such as max tokens and sampling strategies. Defaults to None.
-            num_patches_list (Optional[List[int]]): Optional list of patch indices or sizes for input processing. Defaults to None.
-            return_full_history (bool): Flag indicating whether to return the full conversation history. Defaults to False.
-
-        Returns:
-            Generator[str, None, None]: A generator yielding parts of the generated response in real-time.
-        """
+            Streams the conversation based on the provided question and parameters using threaded execution.
+            """
         streamer, gen_config = self.get_stream_generation_config(max_new_tokens=self.MAX_NEW_TOKENS, do_sample=True)
         if generation_config is None:
             generation_config = gen_config
         shared_result = {"response": None, "history": None}
 
         def chat_thread_function():
-            result = self.model_mng.model.chat(
-                tokenizer=self.model_mng.tokenizer,
-                pixel_values=pixel_values,
-                question=question,
-                history=self.history_mng.history,
-                generation_config=generation_config,
-                num_patches_list=num_patches_list,
-                return_history=return_full_history,
-            )
-            if return_full_history:
-                shared_result["response"], shared_result["history"] = result
-            else:
-                shared_result["response"] = result
+            try:
+                result = self.model_mng.model.chat(
+                    tokenizer=self.model_mng.tokenizer,
+                    pixel_values=pixel_values,
+                    question=question,
+                    history=self.history_mng.history,
+                    generation_config=generation_config,
+                    num_patches_list=num_patches_list,
+                    return_history=return_full_history,
+                )
+                if return_full_history:
+                    shared_result["response"], shared_result["history"] = result
+                else:
+                    shared_result["response"] = result
+            except Exception as e:
+                self.logger.error(f"Chat thread encountered an error: {str(e)}")
+                shared_result["response"] = f"Error: {str(e)}"
 
         thread = Thread(target=chat_thread_function)
         thread.start()
         generated_text = ""
-        if streamer:
-            for new_text in streamer:
-                if new_text == self.model_mng.model.conv_template.sep:  # Check for end of stream
-                    break
-                generated_text += new_text
-                yield new_text
-        thread.join()
+        try:
+            if streamer:
+                for new_text in streamer:
+                    try:
+                        # Attempt to fetch from the queue
+                        if new_text == self.model_mng.model.conv_template.sep:  # Check for end of stream
+                            break
+                        generated_text += new_text
+                        yield new_text
+                    except queue.Empty:
+                        self.logger.warning("Timeout: No data available in the streamer queue.")
+                        break  # Exit if no new data is available for too long
+        except Exception as e:
+            self.logger.error(f"Error in streamer loop: {str(e)}")
+        finally:
+            # Ensure the thread completes before exiting
+            thread.join()
+
         if return_full_history:
             with self.history_mng.history_lock:
                 self.logger.debug(f"[{self.name}] Updating history with: `{shared_result['history']}` ...")
@@ -206,16 +211,18 @@ class ChatManager:
         self.logger.debug(f"[{self.name}] Complete answer: `{generated_text}`")
 
     def get_image_pixel_values(self, image_paths: list[str]):
-        """"""
+        """
+        Preprocess images and generate pixel_values in float precision to match the model's operations.
+        """
         if len(image_paths) == 1:
             # Single image
-            pixel_values = self.load_image(image_paths[0], max_num=12).to(torch.float16).cuda()
+            pixel_values = self.load_image(image_paths[0], max_num=12).to(torch.float32)  # Changed to float32
             num_patches_list = None
         else:
             # Multiple images
             p_values_list, num_patches_list = [], []
             for image_path in image_paths:
-                p_values = self.load_image(image_path, max_num=12).to(torch.float16).cuda()
+                p_values = self.load_image(image_path, max_num=12).to(torch.float32)  # Changed to float32
                 p_values_list.append(p_values)
                 num_patches_list.append(p_values.size(0))
             p_values_tuple = tuple(p_values_list)
@@ -247,7 +254,7 @@ class ChatManager:
     def get_video_pixel_values(self, mp4_video_path: str, num_segments=12, max_num=1):
         """ Load and preprocess video frames to be able to attach the video data in chats """
         pixel_values, num_patches_list = self.load_video(mp4_video_path, num_segments=num_segments, max_num=max_num)
-        pixel_values = pixel_values.to(torch.float16).cuda()
+        pixel_values = pixel_values.to(torch.float16)
         video_prefix = ''.join([f"Frame{i + 1}: <image>\n" for i in range(len(num_patches_list))])
         return video_prefix, pixel_values, num_patches_list
 
