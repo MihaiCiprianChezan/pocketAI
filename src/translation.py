@@ -46,6 +46,8 @@ class TranslationService:
             #     return ""
             target_lang_code = self.map_language_code(target_lang_code)
             detected_language = detect(text)
+            if not detected_language:
+                detected_language = 'en'
             mapped_source_lang = self.map_language_code(detected_language)
             self.logger.info(f"Detected source language: {mapped_source_lang} (mapped)")
             # if mapped_source_lang == target_lang_code:

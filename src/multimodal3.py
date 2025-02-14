@@ -34,7 +34,7 @@ def initialize_model_and_tokenizer(model_path):
         low_cpu_mem_usage=True,
         use_flash_attn=True,
         trust_remote_code=True,
-    ).eval().cuda()
+    ).eval()
 
     model.system_message = CONVERSATION_META
 
@@ -308,7 +308,7 @@ if __name__ == "__main__":
     print(updated_history)
 
     # Single image conversation
-    pixel_values = load_image("./samples/image2.jpg", max_num=12).to(torch.float16).cuda()
+    pixel_values = load_image("./samples/image2.jpg", max_num=12).to(torch.float16)
     # question = "<image>\nPlease describe the image in detail."
     question = "<image>\nPlease briefly describe the image."
     # response, history = chat(model, tokenizer, question, pixel_values, generation_config, history=None)
@@ -324,7 +324,7 @@ if __name__ == "__main__":
 
     # Video conversation
     pixel_values, num_patches_list = load_video("./samples/red-panda.mp4", num_segments=8, max_num=1)
-    pixel_values = pixel_values.to(torch.float16).cuda()
+    pixel_values = pixel_values.to(torch.float16)
     video_prefix = ''.join([f"Frame{i + 1}: <image>\n" for i in range(len(num_patches_list))])
 
     question = video_prefix + "What is the red panda doing?"

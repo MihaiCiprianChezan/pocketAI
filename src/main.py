@@ -8,7 +8,7 @@ import time
 from time import sleep
 import traceback
 import uuid
-
+from langdetect import detect
 from better_profanity import profanity
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import QApplication, QMainWindow
@@ -327,6 +327,16 @@ class VoiceApp(QObject):
             return
         self.logger.debug("[APP] Assistant IS NOT currently speaking, <NO_REASON_TO_STOP> ...")
 
+
+    @staticmethod
+    def get_text_lang(text):
+        detected_language = detect(text)
+        if not detected_language:
+            return "en"
+        if detected_language == "zh-cn":
+            return "zh"
+        return detected_language
+
     def read_selected_text(self, is_for_assistant):
         """Read the selected text."""
         with Attention(is_for_assistant, "read_selected_text()", self.logger):
@@ -335,7 +345,9 @@ class VoiceApp(QObject):
             sleep(0.3)
             text = pyperclip.paste()
             self.ball_change_color(self.OPERATING_TEXT)
-            self.agent_speak(text, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+            detected_language = self.get_text_lang(text)
+            self.logger.info(f"Detected source language: {detected_language}")
+            self.agent_speak(text, speaking_color=self.SPEAKING, after_color=self.INITIAL, lang=detected_language)
 
     def screen_capture(self, is_for_assistant):
         """Launch the integrated screen capture dialog."""
@@ -406,8 +418,9 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            ai_response = self.get_ai_response(Prompt(f"Please explain this:\n`{copied_text}`"))
-            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+            detected_language = self.get_text_lang(copied_text)
+            ai_response = self.get_ai_response(Prompt(f"Explain this text:\n`{copied_text}`"))
+            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL, lang=detected_language)
 
     def summarize_selected_text(self, is_for_assistant):
         """Summarize the selected text."""
@@ -417,9 +430,10 @@ class VoiceApp(QObject):
             sleep(0.3)
             copied_text = pyperclip.paste()
             copied_text = copied_text.replace('\n', '').strip()
-            prompt = f"Please summarize this:\n `{copied_text}`"
+            prompt = f"Summarize this text:\n `{copied_text}`"
+            detected_language = self.get_text_lang(copied_text)
             ai_response = self.get_ai_response(Prompt(prompt))
-            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL)
+            self.agent_speak(ai_response, speaking_color=self.SPEAKING, after_color=self.INITIAL, lang=detected_language)
 
     def translate_selected_text(self, is_for_assistant, lang="en"):
         """Explain the selected text."""

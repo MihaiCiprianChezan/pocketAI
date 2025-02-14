@@ -4,7 +4,7 @@ from assistant.history import HistoryManager
 from assistant.model import ModelManager
 from assistant.tool import ToolManager
 from similarity import Similarity
-from utils import INTERN_VL_2_5_2B
+from utils import INTERN_VL_2_5_2B, INTERN_VL_2_5_1B
 
 
 class Assistant:
@@ -29,7 +29,8 @@ class Assistant:
     # Minimum score to consider the message related with the whole history
     MIN_HISTORY_SCORE = 0.5
 
-    def __init__(self, model_name=INTERN_VL_2_5_2B):
+    def __init__(self, model_name=INTERN_VL_2_5_1B):
+    # def __init__(self, model_name=INTERN_VL_2_5_2B):
         self.logger = AppLogger()
         self.model_mng = ModelManager(model_name, trust_remote_code=True, logger=self.logger)
         self.tools_mng = ToolManager(logger=self.logger)
@@ -51,7 +52,7 @@ class Assistant:
             self.history_mng.history = []
         self.logger.error(f"[{self.name}] > History after cleaning: {self.history_mng.history}")
 
-    def regulate_history(self, message, context_free=False):
+    def regulate_history(self, message, context_free=True):
         self.logger.debug(f"[{self.name}] History before regulation: {self.history_mng.get_formated()}")
         if context_free:
             # TODO: Check if really needs to clear history ...
@@ -76,7 +77,8 @@ class Assistant:
         if not user_prompt.message:
             return
         self.logger.debug(f"[{self.name}] User query: `{user_prompt.message}`")
-        self.regulate_history(user_prompt.message, context_free)
+        self.clean_history()
+        # self.regulate_history(user_prompt.message, context_free)
 
         tool_result = self.tools_mng.dispatch(user_prompt)
 

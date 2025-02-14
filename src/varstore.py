@@ -54,7 +54,6 @@ SHORT_CONFIRMS = [
     'absolutely!',
     'definitely!',
     'for sure!',
-    'mmhmm!',
     'oh!',
     'alright!',
     'aye!',

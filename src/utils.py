@@ -16,6 +16,7 @@ VOSK_MODEL_SMALL_EN_US_0_15 = str(MODELS_DIR / "vosk-model-small-en-us-0.15")
 VOSK_MODEL_EN_US_0_22_LGRAPH = str(MODELS_DIR / "vosk-model-en-us-0.22-lgraph")
 INTERNLM__2_5__1_8_B_CHAT = str(MODELS_DIR / "internlm2_5-1_8b-chat")
 INTERN_VL_2_5_2B = str(MODELS_DIR / "InternVL2_5-2B")
+INTERN_VL_2_5_1B = str("OpenGVLab/InternVL2-1B")
 
 THUDM_GLM_EDGE_1_5_B_CHAT = str(MODELS_DIR / "THUDM-glm-edge-1.5b-chat")
 CROSS_ENCODER_NLI_DISTILROBERTA_BASE = str(MODELS_DIR / "cross-encoder-nli-distilroberta-base")
